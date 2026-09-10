@@ -1,5 +1,5 @@
 import { DataPoint } from "@/lib/types";
-import { CHARGER_RATIO_BENCHMARK, HIGHWAY_CHARGER_RATIO_BENCHMARK } from "@/lib/data";
+import { CHARGER_RATIO_BENCHMARK, HIGHWAY_CHARGER_RATIO_BENCHMARK, formatShortfall } from "@/lib/data";
 import KpiPanel from "@/components/KpiPanel";
 import SegmentMixBar from "@/components/charts/SegmentMixBar";
 
@@ -38,6 +38,13 @@ export default function LocationDetailPanel({
           { label: "Gap score", value: String(point.gapScore) },
         ]}
       />
+
+      <div className="mt-4 rounded-md border border-line bg-panel2/40 px-3 py-2.5 text-[13px] leading-relaxed text-muted">
+        <span className="text-ink font-medium">
+          {formatShortfall(point.chargersNeeded, point.existingChargers, point.shortfall)}
+        </span>{" "}
+        chargers against the benchmark density for this location.
+      </div>
 
       <div className="mt-4 rounded-md border border-line bg-panel2/40 px-3 py-2.5 text-[13px] leading-relaxed text-muted">
         <span className="text-ink font-medium">

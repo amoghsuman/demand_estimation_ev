@@ -10,6 +10,8 @@ import SegmentMixDonut from "@/components/charts/SegmentMixDonut";
 import DemandSupplyChart from "@/components/charts/DemandSupplyChart";
 import StateEvChargerChart from "@/components/charts/StateEvChargerChart";
 import CorridorGapChart from "@/components/charts/CorridorGapChart";
+import CityShortfallChart from "@/components/charts/CityShortfallChart";
+import CategoryGapChart from "@/components/charts/CategoryGapChart";
 import RankedTable, { Column } from "@/components/RankedTable";
 import {
   ALL_POINTS,
@@ -20,6 +22,8 @@ import {
   governmentKpis,
   fleetKpis,
   aggregateSegmentCounts,
+  cityShortfalls,
+  categoryGapBreakdown,
 } from "@/lib/data";
 import { ChargerRecommendation, DataPoint, Role, StateAggregate } from "@/lib/types";
 import { MetricKey } from "@/components/MapView";
@@ -31,6 +35,17 @@ const METRIC_OPTIONS: { key: MetricKey; label: string }[] = [
   { key: "demandScore", label: "Demand" },
   { key: "existingChargers", label: "Supply" },
 ];
+
+// Keeps the ranking score primary while making its shortfall traceable
+// right next to it, wherever a gap-style score appears in a table.
+function ScoreCell({ score, shortfall }: { score: number; shortfall: number }) {
+  return (
+    <div>
+      <div>{score}</div>
+      <div className="text-[11px] font-normal text-muted">short {shortfall}</div>
+    </div>
+  );
+}
 
 const CHARGER_TYPE_LABELS: Record<ChargerRecommendation, string> = {
   "DC fast charger (CCS2)": "DC fast",
@@ -84,6 +99,8 @@ export default function Home() {
     [nationalMixPoints]
   );
   const topGapPoints = useMemo(() => opRows.slice(0, 9), [opRows]);
+  const cityShortfallRows = useMemo(() => cityShortfalls(opRows), [opRows]);
+  const categoryGapRows = useMemo(() => categoryGapBreakdown(ALL_POINTS), []);
 
   const operatorColumns: Column<DataPoint>[] = [
     { key: "name", label: "Location", width: "19%", render: (r) => r.name },
@@ -114,7 +131,7 @@ export default function Home() {
       align: "right",
       width: "16%",
       emphasize: true,
-      render: (r) => r.gapScore,
+      render: (r) => <ScoreCell score={r.gapScore} shortfall={r.shortfall} />,
     },
   ];
 
@@ -154,40 +171,46 @@ export default function Home() {
       align: "right",
       width: "20%",
       emphasize: true,
-      render: (r) => r.avgGapScore,
+      render: (r) => <ScoreCell score={r.avgGapScore} shortfall={r.totalShortfall} />,
     },
   ];
 
   const fleetColumns: Column<DataPoint>[] = [
-    { key: "name", label: "Stop", width: "28%", render: (r) => r.name },
+    { key: "name", label: "Stop", width: "19%", render: (r) => r.name },
+    {
+      key: "recommendedChargerType",
+      label: "Charger",
+      width: "17%",
+      render: (r) => CHARGER_TYPE_LABELS[r.recommendedChargerType],
+    },
     {
       key: "existingChargingLocations",
       label: "Sites",
       align: "right",
-      width: "13%",
+      width: "11%",
       render: (r) => r.existingChargingLocations ?? 0,
     },
     {
       key: "estimatedDailyTransactions",
       label: "Daily txns",
       align: "right",
-      width: "18%",
+      width: "15%",
       render: (r) => (r.estimatedDailyTransactions ?? 0).toLocaleString("en-IN"),
     },
     {
       key: "evDensity",
-      label: "EV density",
+      label: "Density",
       align: "right",
-      width: "18%",
+      width: "16%",
       render: (r) => r.evDensity ?? "-",
     },
     {
       key: "needScore",
       label: "Need score",
       align: "right",
-      width: "23%",
+      width: "22%",
       emphasize: true,
-      render: (r) => r.needScore ?? r.gapScore,
+      render: (r) => <ScoreCell score={r.needScore ?? r.gapScore} shortfall={r.shortfall} />,
     },
   ];
 
@@ -208,6 +231,7 @@ export default function Home() {
             metric={metric}
             emphasizeCorridor={role === "fleet"}
             onSelect={handleMapSelect}
+            focusPoint={selectedPoint}
           />
           <div className="absolute top-4 left-4 bg-panel/90 backdrop-blur border border-line rounded-md px-1 py-1 flex gap-1 z-[500]">
             {METRIC_OPTIONS.map((opt) => (
@@ -308,6 +332,24 @@ export default function Home() {
                 <CorridorGapChart points={flRows} />
               </>
             )}
+          </div>
+
+          {role === "operator" && (
+            <div className="rounded-lg border border-line bg-panel p-5">
+              <h3 className="font-display text-base text-ink">Total shortfall by city</h3>
+              <p className="mb-3 mt-1 text-[11px] text-muted">
+                Chargers needed minus existing, summed across each city&apos;s sites
+              </p>
+              <CityShortfallChart cities={cityShortfallRows} />
+            </div>
+          )}
+
+          <div className="rounded-lg border border-line bg-panel p-5 lg:col-span-2">
+            <h3 className="font-display text-base text-ink">Average gap score by area category</h3>
+            <p className="mb-3 mt-1 text-[11px] text-muted">
+              Residential, commercial, industrial, and highway sites compared nationally
+            </p>
+            <CategoryGapChart rows={categoryGapRows} />
           </div>
         </div>
       </section>

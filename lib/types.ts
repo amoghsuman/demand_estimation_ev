@@ -45,6 +45,11 @@ export interface DataPoint {
   demandScore: number;
   existingChargers: number;
   gapScore: number;
+  // Chargers this point would need to hit the best-observed (tier-1 /
+  // highway) benchmark density, and how far existingChargers falls short
+  // of that, floored at zero. See DATA_ASSUMPTIONS.md.
+  chargersNeeded: number;
+  shortfall: number;
   footfallEstimate: number;
   distanceToNearestChargerKm: number;
   isCorridor: boolean;
@@ -67,6 +72,7 @@ export interface StateAggregate {
   targetChargers: number;
   evRegistrations: number;
   avgGapScore: number;
+  totalShortfall: number;
 }
 
 export type Role = "operator" | "government" | "fleet";

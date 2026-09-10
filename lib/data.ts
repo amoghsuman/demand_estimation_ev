@@ -474,56 +474,72 @@ function buildUrbanPoints(): DataPoint[] {
   const drafts = buildUrbanDrafts();
   const demandScores = normalizeTo99(drafts.map((d) => d.demandRaw));
   const gapScores = normalizeTo99(drafts.map((d) => d.gapRaw));
-  return drafts.map((d, i) => ({
-    id: d.id,
-    name: d.name,
-    city: d.city,
-    state: d.state,
-    lat: d.lat,
-    lng: d.lng,
-    category: d.category,
-    cityTier: d.cityTier,
-    evRegistrations: d.evRegistrations,
-    segmentCounts: d.segmentCounts,
-    segmentMix: d.segmentMix,
-    demandScore: demandScores[i],
-    existingChargers: d.existingChargers,
-    gapScore: gapScores[i],
-    footfallEstimate: d.footfallEstimate,
-    distanceToNearestChargerKm: d.distanceToNearestChargerKm,
-    isCorridor: false,
-    recommendedChargerType: recommendChargerType(d.segmentMix),
-  }));
+  return drafts.map((d, i) => {
+    // Chargers needed to hit the best-observed (tier-1 of that tier's
+    // band) benchmark density, vs. what the site actually has today.
+    const bestRatio = CHARGER_RATIO_BENCHMARK[d.cityTier][0];
+    const chargersNeeded = Math.round(d.evRegistrations / bestRatio);
+    const shortfall = Math.max(0, chargersNeeded - d.existingChargers);
+    return {
+      id: d.id,
+      name: d.name,
+      city: d.city,
+      state: d.state,
+      lat: d.lat,
+      lng: d.lng,
+      category: d.category,
+      cityTier: d.cityTier,
+      evRegistrations: d.evRegistrations,
+      segmentCounts: d.segmentCounts,
+      segmentMix: d.segmentMix,
+      demandScore: demandScores[i],
+      existingChargers: d.existingChargers,
+      gapScore: gapScores[i],
+      chargersNeeded,
+      shortfall,
+      footfallEstimate: d.footfallEstimate,
+      distanceToNearestChargerKm: d.distanceToNearestChargerKm,
+      isCorridor: false,
+      recommendedChargerType: recommendChargerType(d.segmentMix),
+    };
+  });
 }
 
 function buildCorridorPoints(): DataPoint[] {
   const drafts = buildCorridorDrafts();
   const demandScores = normalizeTo99(drafts.map((d) => d.demandRaw));
   const gapScores = normalizeTo99(drafts.map((d) => d.gapRaw));
-  return drafts.map((d, i) => ({
-    id: d.id,
-    name: d.name,
-    city: d.city,
-    state: d.state,
-    lat: d.lat,
-    lng: d.lng,
-    category: "highway" as const,
-    evRegistrations: d.evRegistrations,
-    segmentCounts: d.segmentCounts,
-    segmentMix: d.segmentMix,
-    demandScore: demandScores[i],
-    existingChargers: d.existingChargers,
-    gapScore: gapScores[i],
-    footfallEstimate: d.footfallEstimate,
-    distanceToNearestChargerKm: d.distanceToNearestChargerKm,
-    isCorridor: true,
-    corridorName: d.corridorName,
-    recommendedChargerType: recommendChargerType(d.segmentMix),
-    existingChargingLocations: d.existingChargingLocations,
-    estimatedDailyTransactions: Math.round(demandScores[i] * between(1.5, 3.5)),
-    needScore: gapScores[i],
-    evDensity: evDensityFor(demandScores[i]),
-  }));
+  const bestRatio = HIGHWAY_CHARGER_RATIO_BENCHMARK[0];
+  return drafts.map((d, i) => {
+    const chargersNeeded = Math.round(d.evRegistrations / bestRatio);
+    const shortfall = Math.max(0, chargersNeeded - d.existingChargers);
+    return {
+      id: d.id,
+      name: d.name,
+      city: d.city,
+      state: d.state,
+      lat: d.lat,
+      lng: d.lng,
+      category: "highway" as const,
+      evRegistrations: d.evRegistrations,
+      segmentCounts: d.segmentCounts,
+      segmentMix: d.segmentMix,
+      demandScore: demandScores[i],
+      existingChargers: d.existingChargers,
+      gapScore: gapScores[i],
+      chargersNeeded,
+      shortfall,
+      footfallEstimate: d.footfallEstimate,
+      distanceToNearestChargerKm: d.distanceToNearestChargerKm,
+      isCorridor: true,
+      corridorName: d.corridorName,
+      recommendedChargerType: recommendChargerType(d.segmentMix),
+      existingChargingLocations: d.existingChargingLocations,
+      estimatedDailyTransactions: Math.round(demandScores[i] * between(1.5, 3.5)),
+      needScore: gapScores[i],
+      evDensity: evDensityFor(demandScores[i]),
+    };
+  });
 }
 
 export const URBAN_POINTS = buildUrbanPoints();
@@ -537,6 +553,7 @@ export function buildStateAggregates(): StateAggregate[] {
     const currentChargers = pts.reduce((s, p) => s + p.existingChargers, 0);
     const evRegistrations = pts.reduce((s, p) => s + p.evRegistrations, 0);
     const avgGapScore = round(pts.reduce((s, p) => s + p.gapScore, 0) / pts.length);
+    const totalShortfall = pts.reduce((s, p) => s + p.shortfall, 0);
     // Aspirational target: what full coverage would need at the
     // best-observed (tier-1) benchmark density of 1 charger per 500 EVs.
     const targetChargers = Math.max(currentChargers + 5, Math.round(evRegistrations / 500));
@@ -549,6 +566,7 @@ export function buildStateAggregates(): StateAggregate[] {
       targetChargers,
       evRegistrations,
       avgGapScore,
+      totalShortfall,
     };
   });
 }
@@ -617,4 +635,40 @@ export function aggregateSegmentCounts(points: DataPoint[]): SegmentCounts {
     }),
     { twoWheeler: 0, threeWheeler: 0, fourWheeler: 0, fleet: 0 }
   );
+}
+
+// Plain-language trace from a point's chargersNeeded/existingChargers back
+// to its shortfall, so the on-screen number is never opaque.
+export function formatShortfall(needed: number, existing: number, shortfall: number): string {
+  return `Needs ${needed}, has ${existing}, short by ${shortfall}`;
+}
+
+// Total shortfall (chargersNeeded - existingChargers, already floored at
+// zero per point) summed by city, for the operator "which city needs the
+// most attention" chart.
+export function cityShortfalls(points: DataPoint[]): { city: string; shortfall: number }[] {
+  const totals = new Map<string, number>();
+  points.forEach((p) => {
+    totals.set(p.city, (totals.get(p.city) ?? 0) + p.shortfall);
+  });
+  return Array.from(totals, ([city, shortfall]) => ({ city, shortfall })).sort(
+    (a, b) => b.shortfall - a.shortfall
+  );
+}
+
+const CATEGORY_ORDER: AreaCategory[] = ["residential", "commercial", "industrial", "highway"];
+
+// Average gap score per area category across whatever points are passed
+// in, so patterns by area type are visible independent of location or
+// state.
+export function categoryGapBreakdown(
+  points: DataPoint[]
+): { category: AreaCategory; avgGapScore: number }[] {
+  return CATEGORY_ORDER.map((category) => {
+    const pts = points.filter((p) => p.category === category);
+    return {
+      category,
+      avgGapScore: round(pts.reduce((s, p) => s + p.gapScore, 0) / pts.length),
+    };
+  }).filter((row) => points.some((p) => p.category === row.category));
 }
