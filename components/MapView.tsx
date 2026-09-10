@@ -42,10 +42,12 @@ function colorForValue(value: number, max: number) {
 }
 
 function popupHtml(p: DataPoint) {
+  const evLabel = p.isCorridor ? "Daily EVs" : "Registered EVs";
   return `<div style="font-family: 'Inter', sans-serif; min-width: 190px; color: #1B1D22;">
-    <div style="font-family: 'Newsreader', serif; font-size: 16px; margin-bottom: 4px;">${p.name}</div>
+    <div style="font-family: 'Newsreader', serif; font-size: 16px; font-weight: 600; margin-bottom: 4px;">${p.name}</div>
     <div style="color:#6B6F76; font-size:11px; margin-bottom:8px;">${p.city}, ${p.state}</div>
     <div style="font-size:13px; line-height:1.6;">
+      ${evLabel} &nbsp;<strong>${p.evRegistrations.toLocaleString("en-IN")}</strong><br/>
       Demand score &nbsp;<strong>${p.demandScore}</strong><br/>
       Existing chargers &nbsp;<strong>${p.existingChargers}</strong><br/>
       Gap score &nbsp;<strong>${p.gapScore}</strong><br/>

@@ -189,6 +189,64 @@ const CORRIDORS: Corridor[] = [
       { name: "Chennai Approach", lat: 13.0, lng: 79.9 },
     ],
   },
+  {
+    name: "Delhi – Chandigarh (NH44)",
+    state: "Haryana",
+    waypoints: [
+      { name: "Sonipat", lat: 28.99, lng: 77.01 },
+      { name: "Panipat", lat: 29.39, lng: 76.97 },
+      { name: "Karnal", lat: 29.68, lng: 76.99 },
+      { name: "Ambala Cantt", lat: 30.38, lng: 76.78 },
+      { name: "Zirakpur", lat: 30.64, lng: 76.82 },
+      { name: "Chandigarh Approach", lat: 30.72, lng: 76.78 },
+    ],
+  },
+  {
+    name: "Mumbai – Ahmedabad (NH48)",
+    state: "Gujarat",
+    waypoints: [
+      { name: "Bhiwandi Bypass", lat: 19.3, lng: 73.06 },
+      { name: "Vapi", lat: 20.37, lng: 72.91 },
+      { name: "Valsad", lat: 20.6, lng: 72.93 },
+      { name: "Surat Bypass", lat: 21.17, lng: 72.83 },
+      { name: "Vadodara", lat: 22.31, lng: 73.18 },
+      { name: "Ahmedabad Approach", lat: 22.99, lng: 72.6 },
+    ],
+  },
+  {
+    name: "Kolkata – Bhubaneswar (NH16)",
+    state: "Odisha",
+    waypoints: [
+      { name: "Kharagpur", lat: 22.35, lng: 87.23 },
+      { name: "Balasore", lat: 21.49, lng: 86.93 },
+      { name: "Bhadrak", lat: 21.06, lng: 86.52 },
+      { name: "Cuttack", lat: 20.46, lng: 85.88 },
+      { name: "Bhubaneswar Approach", lat: 20.3, lng: 85.82 },
+    ],
+  },
+  {
+    name: "Hyderabad – Bengaluru (NH44)",
+    state: "Karnataka",
+    waypoints: [
+      { name: "Jadcherla", lat: 16.76, lng: 78.16 },
+      { name: "Shadnagar", lat: 17.06, lng: 78.19 },
+      { name: "Kurnool", lat: 15.83, lng: 78.04 },
+      { name: "Anantapur", lat: 14.68, lng: 77.6 },
+      { name: "Chikkaballapur", lat: 13.43, lng: 77.73 },
+      { name: "Bengaluru Approach", lat: 13.05, lng: 77.59 },
+    ],
+  },
+  {
+    name: "Chennai – Coimbatore (NH544)",
+    state: "Tamil Nadu",
+    waypoints: [
+      { name: "Sriperumbudur", lat: 12.97, lng: 79.94 },
+      { name: "Kanchipuram", lat: 12.84, lng: 79.7 },
+      { name: "Salem", lat: 11.66, lng: 78.15 },
+      { name: "Erode", lat: 11.34, lng: 77.73 },
+      { name: "Coimbatore Approach", lat: 11.02, lng: 76.97 },
+    ],
+  },
 ];
 
 // --- Assumptions (documented in DATA_ASSUMPTIONS.md) ---
@@ -329,6 +387,105 @@ function normalizeTo99(values: number[]): number[] {
   return values.map((v) => Math.round(((v - min) / (max - min)) * 99));
 }
 
+// --- Pincode-level point generation (documented in DATA_ASSUMPTIONS.md) ---
+
+// How many generated pincode-style points to scatter per city, on top of
+// the named landmark sub-locations, by tier.
+const TIER_PINCODE_COUNT_RANGE: Record<CityTier, [number, number]> = {
+  1: [12, 18],
+  2: [8, 12],
+  3: [5, 8],
+};
+
+// Scatter radius in km from the city center, by tier.
+const TIER_PINCODE_RADIUS_KM: Record<CityTier, [number, number]> = {
+  1: [3, 25],
+  2: [2, 15],
+  3: [2, 15],
+};
+
+// Real first-3-digit PIN code prefixes for each hub city, so generated
+// pincode labels are plausible. Delhi NCR spans several distinct postal
+// circles, so it draws from all of them.
+const PINCODE_PREFIXES: Record<string, string[]> = {
+  "Delhi NCR": ["110", "122", "201", "121"],
+  Mumbai: ["400"],
+  Bengaluru: ["560"],
+  Pune: ["411"],
+  Hyderabad: ["500"],
+  Chennai: ["600"],
+  Kolkata: ["700"],
+  Ahmedabad: ["380"],
+  Jaipur: ["302"],
+  Surat: ["395"],
+};
+
+function lerp(a: number, b: number, t: number) {
+  return a + (b - a) * t;
+}
+
+// Weights area category by how far from the city center a generated point
+// falls: closer in skews commercial and residential, further out skews
+// industrial, residential, and highway-adjacent.
+function categoryForDistanceFraction(t: number): AreaCategory {
+  const weights: Record<AreaCategory, number> = {
+    commercial: lerp(34, 8, t),
+    residential: lerp(40, 42, t),
+    industrial: lerp(11, 35, t),
+    highway: lerp(5, 15, t),
+  };
+  const order: AreaCategory[] = ["commercial", "residential", "industrial", "highway"];
+  const total = order.reduce((s, cat) => s + weights[cat], 0);
+  let r = rand() * total;
+  for (const cat of order) {
+    if (r < weights[cat]) return cat;
+    r -= weights[cat];
+  }
+  return "residential";
+}
+
+function randomPincode(prefixes: string[]): string {
+  const prefix = prefixes[Math.floor(rand() * prefixes.length)];
+  const suffix = String(Math.round(between(1, 999))).padStart(3, "0");
+  return `${prefix}${suffix}`;
+}
+
+interface GeneratedLocation {
+  name: string;
+  category: AreaCategory;
+  lat: number;
+  lng: number;
+}
+
+// Scatters pincode-style points around a hub's center within a realistic
+// radius, each carrying a plausible "Sector N, Pincode XXXXXX" label.
+function generatePincodePoints(hub: Hub): GeneratedLocation[] {
+  const [minCount, maxCount] = TIER_PINCODE_COUNT_RANGE[hub.tier];
+  const count = Math.round(between(minCount, maxCount));
+  const [minRadiusKm, maxRadiusKm] = TIER_PINCODE_RADIUS_KM[hub.tier];
+  const prefixes = PINCODE_PREFIXES[hub.city] ?? ["110"];
+  const kmPerLngDegree = 111 * Math.cos((hub.lat * Math.PI) / 180);
+
+  const points: GeneratedLocation[] = [];
+  for (let i = 0; i < count; i++) {
+    const distanceKm = between(minRadiusKm, maxRadiusKm);
+    const distanceFraction = (distanceKm - minRadiusKm) / (maxRadiusKm - minRadiusKm || 1);
+    const bearingRad = (between(0, 360) * Math.PI) / 180;
+    const category = categoryForDistanceFraction(distanceFraction);
+    const latOffset = (distanceKm / 111) * Math.cos(bearingRad);
+    const lngOffset = (distanceKm / kmPerLngDegree) * Math.sin(bearingRad);
+    const sectorNum = Math.round(between(1, 150));
+
+    points.push({
+      name: `Sector ${sectorNum}, Pincode ${randomPincode(prefixes)}`,
+      category,
+      lat: round(hub.lat + latOffset, 4),
+      lng: round(hub.lng + lngOffset, 4),
+    });
+  }
+  return points;
+}
+
 interface UrbanDraft {
   id: string;
   name: string;
@@ -354,17 +511,26 @@ function buildUrbanDrafts(): UrbanDraft[] {
     const [baseMin, baseMax] = CITY_EV_BASE_RANGE[hub.tier];
     const cityEvTotal = Math.round(between(baseMin, baseMax));
 
-    // Split the city total unevenly across its sub-locations.
-    const weights = hub.subLocations.map(() => between(0.6, 1.6));
+    // Landmarks keep a tight offset around their named location; pincode
+    // points scatter across a realistic city-wide radius, weighted toward
+    // commercial/residential near the center and industrial/residential/
+    // highway further out (see generatePincodePoints).
+    const landmarkEntries: GeneratedLocation[] = hub.subLocations.map((sub) => ({
+      name: sub.name,
+      category: sub.category,
+      lat: round(hub.lat + between(-0.06, 0.06), 4),
+      lng: round(hub.lng + between(-0.06, 0.06), 4),
+    }));
+    const allEntries = [...landmarkEntries, ...generatePincodePoints(hub)];
+
+    // Split the city total unevenly across all of its locations.
+    const weights = allEntries.map(() => between(0.6, 1.6));
     const weightSum = weights.reduce((s, w) => s + w, 0);
 
-    hub.subLocations.forEach((sub, i) => {
-      const latOffset = between(-0.06, 0.06);
-      const lngOffset = between(-0.06, 0.06);
-
+    allEntries.forEach((entry, i) => {
       const evRegistrations = Math.max(50, Math.round((weights[i] / weightSum) * cityEvTotal));
 
-      const mix = jitterSegmentMix(segmentMixFor(sub.category, hub.tier));
+      const mix = jitterSegmentMix(segmentMixFor(entry.category, hub.tier));
       const segmentCounts = segmentCountsFromMix(mix, evRegistrations);
       const segmentMix = mixFromCounts(segmentCounts);
 
@@ -379,12 +545,12 @@ function buildUrbanDrafts(): UrbanDraft[] {
 
       drafts.push({
         id: `${hub.city}-${i}`.replace(/\s+/g, "-").toLowerCase(),
-        name: sub.name,
+        name: entry.name,
         city: hub.city,
         state: hub.state,
-        lat: round(hub.lat + latOffset, 4),
-        lng: round(hub.lng + lngOffset, 4),
-        category: sub.category,
+        lat: entry.lat,
+        lng: entry.lng,
+        category: entry.category,
         cityTier: hub.tier,
         evRegistrations,
         segmentCounts,

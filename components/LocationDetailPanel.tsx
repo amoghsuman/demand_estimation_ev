@@ -1,5 +1,6 @@
 import { DataPoint } from "@/lib/types";
 import { CHARGER_RATIO_BENCHMARK, HIGHWAY_CHARGER_RATIO_BENCHMARK, formatShortfall } from "@/lib/data";
+import { SEGMENT_KEYS, SEGMENT_LABELS } from "@/lib/chartColors";
 import KpiPanel from "@/components/KpiPanel";
 import SegmentMixBar from "@/components/charts/SegmentMixBar";
 
@@ -25,7 +26,7 @@ export default function LocationDetailPanel({
         <span aria-hidden>←</span> Back to list
       </button>
 
-      <h2 className="font-display text-base text-ink italic">{point.name}</h2>
+      <h2 className="font-display text-lg font-semibold text-ink">{point.name}</h2>
       <p className="mb-4 mt-1 text-[11px] text-muted">
         {point.isCorridor ? point.corridorName : `${point.city}, ${point.state}`}
         {point.cityTier && ` · Tier ${point.cityTier}`}
@@ -33,20 +34,24 @@ export default function LocationDetailPanel({
 
       <KpiPanel
         kpis={[
+          {
+            label: point.isCorridor ? "Daily EVs" : "Registered EVs",
+            value: point.evRegistrations.toLocaleString("en-IN"),
+          },
           { label: "Demand score", value: String(point.demandScore) },
           { label: "Existing chargers", value: String(point.existingChargers) },
           { label: "Gap score", value: String(point.gapScore) },
         ]}
       />
 
-      <div className="mt-4 rounded-md border border-line bg-panel2/40 px-3 py-2.5 text-[13px] leading-relaxed text-muted">
+      <div className="mt-4 rounded-md border border-line bg-panel px-3 py-2.5 text-[13px] leading-relaxed text-muted">
         <span className="text-ink font-medium">
           {formatShortfall(point.chargersNeeded, point.existingChargers, point.shortfall)}
         </span>{" "}
         chargers against the benchmark density for this location.
       </div>
 
-      <div className="mt-4 rounded-md border border-line bg-panel2/40 px-3 py-2.5 text-[13px] leading-relaxed text-muted">
+      <div className="mt-4 rounded-md border border-line bg-panel px-3 py-2.5 text-[13px] leading-relaxed text-muted">
         <span className="text-ink font-medium">
           {point.evRegistrations.toLocaleString("en-IN")} {point.isCorridor ? "est. daily EVs" : "EVs"}
         </span>{" "}
@@ -63,16 +68,26 @@ export default function LocationDetailPanel({
         {Math.round(benchLow).toLocaleString("en-IN")}-{Math.round(benchHigh).toLocaleString("en-IN")}.
       </div>
 
-      <div className="mt-4 rounded-md border border-line bg-panel2/40 px-3 py-2.5 text-[13px] leading-relaxed text-muted">
+      <div className="mt-4 rounded-md border border-line bg-panel px-3 py-2.5 text-[13px] leading-relaxed text-muted">
         Recommended charger type:{" "}
         <span className="text-ink font-medium">{point.recommendedChargerType}</span>
       </div>
 
       <div className="mt-6">
-        <h3 className="mb-2.5 font-display text-base text-ink">
+        <h3 className="mb-2.5 font-display text-lg font-semibold text-ink">
           Vehicle segment mix ({point.evRegistrations.toLocaleString("en-IN")} EVs)
         </h3>
         <SegmentMixBar counts={point.segmentCounts} />
+        <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5 rounded-md border border-line bg-panel px-3 py-2.5 text-[13px]">
+          {SEGMENT_KEYS.map((key) => (
+            <div key={key} className="flex items-center justify-between gap-2">
+              <span className="text-muted">{SEGMENT_LABELS[key]}</span>
+              <span className="font-medium text-ink">
+                {point.segmentCounts[key].toLocaleString("en-IN")}
+              </span>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

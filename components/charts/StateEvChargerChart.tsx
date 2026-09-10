@@ -34,8 +34,8 @@ export default function StateEvChargerChart({ states }: { states: StateAggregate
   return (
     <div>
       <ResponsiveContainer width="100%" height={height}>
-        <BarChart data={data} layout="vertical" margin={{ top: 0, right: 44, bottom: 0, left: 0 }} barCategoryGap={8}>
-          <XAxis type="number" hide domain={[0, 125]} />
+        <BarChart data={data} layout="vertical" margin={{ top: 0, right: 56, bottom: 0, left: 0 }} barCategoryGap={8}>
+          <XAxis type="number" hide domain={[0, "dataMax"]} />
           <YAxis
             type="category"
             dataKey="name"

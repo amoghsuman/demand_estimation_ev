@@ -36,13 +36,39 @@ const METRIC_OPTIONS: { key: MetricKey; label: string }[] = [
   { key: "existingChargers", label: "Supply" },
 ];
 
+function formatCompact(n: number) {
+  return new Intl.NumberFormat("en-IN", { notation: "compact", maximumFractionDigits: 1 }).format(n);
+}
+
 // Keeps the ranking score primary while making its shortfall traceable
 // right next to it, wherever a gap-style score appears in a table.
 function ScoreCell({ score, shortfall }: { score: number; shortfall: number }) {
   return (
     <div>
-      <div>{score}</div>
-      <div className="text-[11px] font-normal text-muted">short {shortfall}</div>
+      <div className="font-semibold">{score}</div>
+      <div className="whitespace-nowrap text-[10px] font-normal text-muted">Short by {shortfall}</div>
+    </div>
+  );
+}
+
+// Pincode-generated points carry a "Sector N, Pincode XXXXXX" name; splitting
+// it lets the pincode read as a subtitle instead of wrapping as one long
+// string. The charger type joins that same subtitle line (freeing up a
+// whole column), separated by a middot; landmark and corridor names have
+// no pincode, so their subtitle is just the charger type.
+function splitLocationName(name: string): [string, string | null] {
+  const idx = name.indexOf(", Pincode ");
+  if (idx === -1) return [name, null];
+  return [name.slice(0, idx), name.slice(idx + 2)];
+}
+
+function LocationCell({ name, chargerLabel }: { name: string; chargerLabel: string }) {
+  const [primary, pincode] = splitLocationName(name);
+  const subtitle = pincode ? `${pincode} · ${chargerLabel}` : chargerLabel;
+  return (
+    <div title={name}>
+      <div className="truncate text-ink">{primary}</div>
+      <div className="truncate text-[11px] font-normal text-muted">{subtitle ?? " "}</div>
     </div>
   );
 }
@@ -67,6 +93,10 @@ const ROLE_HEADLINES: Record<Role, { title: string; sub: string }> = {
     sub: "Highway stops compared on charging locations, transactions, density, and need",
   },
 };
+
+const HEADING_CLASS = "font-display text-lg font-semibold text-ink";
+const SUBTEXT_CLASS = "mb-3 mt-1 text-[11px] text-muted";
+const CARD_CLASS = "rounded-lg border border-line bg-panel2 p-4";
 
 export default function Home() {
   const [role, setRole] = useState<Role>("operator");
@@ -102,46 +132,71 @@ export default function Home() {
   const cityShortfallRows = useMemo(() => cityShortfalls(opRows), [opRows]);
   const categoryGapRows = useMemo(() => categoryGapBreakdown(ALL_POINTS), []);
 
+  // The chart grid below the map is 2 columns wide. Operator adds a 4th
+  // card (city shortfall), making the count even and filling the grid
+  // cleanly; government/fleet stay at 3, so the last card spans both
+  // columns to close out that row instead of leaving a gap next to it.
+  const chartCount = role === "operator" ? 4 : 3;
+  const lastChartSpansFull = chartCount % 2 !== 0;
+
   const operatorColumns: Column<DataPoint>[] = [
-    { key: "name", label: "Location", width: "19%", render: (r) => r.name },
-    { key: "city", label: "City", width: "16%", render: (r) => r.city },
     {
-      key: "recommendedChargerType",
-      label: "Charger",
-      width: "17%",
-      render: (r) => CHARGER_TYPE_LABELS[r.recommendedChargerType],
+      key: "name",
+      label: "Location",
+      width: "27%",
+      render: (r) => (
+        <LocationCell name={r.name} chargerLabel={CHARGER_TYPE_LABELS[r.recommendedChargerType]} />
+      ),
+    },
+    { key: "city", label: "City", width: "20%", nowrap: true, render: (r) => r.city },
+    {
+      key: "evRegistrations",
+      label: "EVs",
+      align: "right",
+      width: "10%",
+      nowrap: true,
+      render: (r) => formatCompact(r.evRegistrations),
     },
     {
       key: "demandScore",
       label: "Demand",
       align: "right",
       width: "16%",
+      nowrap: true,
       render: (r) => r.demandScore,
     },
     {
       key: "existingChargers",
       label: "Existing",
       align: "right",
-      width: "16%",
+      width: "14%",
+      nowrap: true,
       render: (r) => r.existingChargers,
     },
     {
       key: "gapScore",
       label: "Gap score",
       align: "right",
-      width: "16%",
+      width: "13%",
       emphasize: true,
       render: (r) => <ScoreCell score={r.gapScore} shortfall={r.shortfall} />,
     },
   ];
 
   const governmentColumns: Column<StateAggregate>[] = [
-    { key: "state", label: "State", width: "25%", render: (r) => r.state },
+    { key: "state", label: "State", width: "23%", nowrap: true, render: (r) => r.state },
+    {
+      key: "evRegistrations",
+      label: "EVs",
+      align: "right",
+      width: "13%",
+      render: (r) => formatCompact(r.evRegistrations),
+    },
     {
       key: "districtsCovered",
       label: "Sites",
       align: "right",
-      width: "12%",
+      width: "10%",
       render: (r) => r.districtsCovered,
     },
     {
@@ -155,60 +210,72 @@ export default function Home() {
       key: "targetChargers",
       label: "Target",
       align: "right",
-      width: "14%",
+      width: "12%",
       render: (r) => r.targetChargers,
     },
     {
       key: "progress",
       label: "Prog.",
       align: "right",
-      width: "14%",
+      width: "12%",
       render: (r) => `${Math.round((r.currentChargers / r.targetChargers) * 100)}%`,
     },
     {
       key: "avgGapScore",
       label: "Avg. gap",
       align: "right",
-      width: "20%",
+      width: "15%",
       emphasize: true,
       render: (r) => <ScoreCell score={r.avgGapScore} shortfall={r.totalShortfall} />,
     },
   ];
 
   const fleetColumns: Column<DataPoint>[] = [
-    { key: "name", label: "Stop", width: "19%", render: (r) => r.name },
     {
-      key: "recommendedChargerType",
-      label: "Charger",
+      key: "name",
+      label: "Stop",
+      width: "28%",
+      render: (r) => (
+        <LocationCell name={r.name} chargerLabel={CHARGER_TYPE_LABELS[r.recommendedChargerType]} />
+      ),
+    },
+    {
+      key: "evRegistrations",
+      label: "Daily EVs",
+      align: "right",
       width: "17%",
-      render: (r) => CHARGER_TYPE_LABELS[r.recommendedChargerType],
+      nowrap: true,
+      render: (r) => formatCompact(r.evRegistrations),
     },
     {
       key: "existingChargingLocations",
       label: "Sites",
       align: "right",
-      width: "11%",
+      width: "10%",
+      nowrap: true,
       render: (r) => r.existingChargingLocations ?? 0,
     },
     {
       key: "estimatedDailyTransactions",
       label: "Daily txns",
       align: "right",
-      width: "15%",
+      width: "17%",
+      nowrap: true,
       render: (r) => (r.estimatedDailyTransactions ?? 0).toLocaleString("en-IN"),
     },
     {
       key: "evDensity",
       label: "Density",
       align: "right",
-      width: "16%",
+      width: "14%",
+      nowrap: true,
       render: (r) => r.evDensity ?? "-",
     },
     {
       key: "needScore",
       label: "Need score",
       align: "right",
-      width: "22%",
+      width: "14%",
       emphasize: true,
       render: (r) => <ScoreCell score={r.needScore ?? r.gapScore} shortfall={r.shortfall} />,
     },
@@ -251,20 +318,18 @@ export default function Home() {
           <MapLegend metric={metric} />
         </div>
 
-        <aside className="w-[480px] shrink-0 border-l border-line bg-panel flex flex-col overflow-y-auto">
-          <div className="px-6 pt-5 pb-5 border-b border-line">
+        <aside className="w-[520px] shrink-0 border-l border-line bg-panel2 flex flex-col overflow-y-auto">
+          <div className="px-6 pt-4 pb-4 border-b border-line">
             <KpiPanel kpis={kpis} />
           </div>
 
-          <div className="flex flex-col min-h-0 flex-1 px-6 pt-5 pb-5">
+          <div className="flex flex-col min-h-0 flex-1 px-6 pt-4 pb-4">
             {selectedPoint ? (
               <LocationDetailPanel point={selectedPoint} onClose={() => setSelectedPoint(null)} />
             ) : (
               <>
-                <h2 className="font-display text-base text-ink italic">
-                  {ROLE_HEADLINES[role].title}
-                </h2>
-                <p className="text-[11px] text-muted mt-1 mb-4">{ROLE_HEADLINES[role].sub}</p>
+                <h2 className={HEADING_CLASS}>{ROLE_HEADLINES[role].title}</h2>
+                <p className="text-[11px] text-muted mt-1 mb-3">{ROLE_HEADLINES[role].sub}</p>
                 <div className="flex-1 min-h-0 overflow-y-auto -mr-2 pr-2">
                   {role === "operator" && (
                     <RankedTable
@@ -296,57 +361,53 @@ export default function Home() {
         </aside>
       </div>
 
-      <section className="border-t border-line px-6 py-6">
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <div className="rounded-lg border border-line bg-panel p-5">
-            <h3 className="font-display text-base text-ink">
+      <section className="border-t border-line px-6 py-4">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div className={CARD_CLASS}>
+            <h3 className={HEADING_CLASS}>
               {role === "fleet" ? "Corridor" : "National"} vehicle segment mix
             </h3>
-            <p className="mb-3 mt-1 text-[11px] text-muted">Total registered EVs by vehicle type</p>
+            <p className={SUBTEXT_CLASS}>Total registered EVs by vehicle type</p>
             <SegmentMixDonut counts={nationalMixCounts} />
           </div>
 
-          <div className="rounded-lg border border-line bg-panel p-5">
+          <div className={CARD_CLASS}>
             {role === "operator" && (
               <>
-                <h3 className="font-display text-base text-ink">
-                  EV registrations vs. existing chargers
-                </h3>
-                <p className="mb-3 mt-1 text-[11px] text-muted">Top sites by gap score</p>
+                <h3 className={HEADING_CLASS}>EV registrations vs. existing chargers</h3>
+                <p className={SUBTEXT_CLASS}>Top sites by gap score</p>
                 <DemandSupplyChart points={topGapPoints} />
               </>
             )}
             {role === "government" && (
               <>
-                <h3 className="font-display text-base text-ink">
-                  EV registrations vs. chargers by state
-                </h3>
-                <p className="mb-3 mt-1 text-[11px] text-muted">Ranked by average gap score</p>
+                <h3 className={HEADING_CLASS}>EV registrations vs. chargers by state</h3>
+                <p className={SUBTEXT_CLASS}>Ranked by average gap score</p>
                 <StateEvChargerChart states={govRows} />
               </>
             )}
             {role === "fleet" && (
               <>
-                <h3 className="font-display text-base text-ink">Distance to nearest charger</h3>
-                <p className="mb-3 mt-1 text-[11px] text-muted">All corridor stops, by route</p>
+                <h3 className={HEADING_CLASS}>Distance to nearest charger</h3>
+                <p className={SUBTEXT_CLASS}>All corridor stops, by route</p>
                 <CorridorGapChart points={flRows} />
               </>
             )}
           </div>
 
           {role === "operator" && (
-            <div className="rounded-lg border border-line bg-panel p-5">
-              <h3 className="font-display text-base text-ink">Total shortfall by city</h3>
-              <p className="mb-3 mt-1 text-[11px] text-muted">
+            <div className={CARD_CLASS}>
+              <h3 className={HEADING_CLASS}>Total shortfall by city</h3>
+              <p className={SUBTEXT_CLASS}>
                 Chargers needed minus existing, summed across each city&apos;s sites
               </p>
               <CityShortfallChart cities={cityShortfallRows} />
             </div>
           )}
 
-          <div className="rounded-lg border border-line bg-panel p-5 lg:col-span-2">
-            <h3 className="font-display text-base text-ink">Average gap score by area category</h3>
-            <p className="mb-3 mt-1 text-[11px] text-muted">
+          <div className={`${CARD_CLASS} ${lastChartSpansFull ? "lg:col-span-2" : ""}`}>
+            <h3 className={HEADING_CLASS}>Average gap score by area category</h3>
+            <p className={SUBTEXT_CLASS}>
               Residential, commercial, industrial, and highway sites compared nationally
             </p>
             <CategoryGapChart rows={categoryGapRows} />

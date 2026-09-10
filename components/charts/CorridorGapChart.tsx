@@ -20,7 +20,7 @@ export default function CorridorGapChart({ points }: { points: DataPoint[] }) {
     <div>
       <ResponsiveContainer width="100%" height={height}>
         <BarChart data={data} layout="vertical" margin={{ top: 0, right: 28, bottom: 0, left: 0 }} barCategoryGap={8}>
-          <XAxis type="number" hide />
+          <XAxis type="number" hide domain={[0, "dataMax"]} />
           <YAxis
             type="category"
             dataKey="name"

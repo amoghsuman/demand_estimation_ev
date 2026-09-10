@@ -28,7 +28,7 @@ export default function CategoryGapChart({
           margin={{ top: 0, right: 28, bottom: 0, left: 0 }}
           barCategoryGap={8}
         >
-          <XAxis type="number" hide domain={[0, 99]} />
+          <XAxis type="number" hide domain={[0, "dataMax"]} />
           <YAxis
             type="category"
             dataKey="name"

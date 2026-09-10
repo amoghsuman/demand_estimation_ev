@@ -38,7 +38,7 @@ export default function DemandSupplyChart({ points }: { points: DataPoint[] }) {
           margin={{ top: 0, right: 8, bottom: 0, left: 0 }}
           barCategoryGap={10}
         >
-          <XAxis type="number" hide domain={[0, 100]} />
+          <XAxis type="number" hide domain={[0, "dataMax"]} />
           <YAxis
             type="category"
             dataKey="name"

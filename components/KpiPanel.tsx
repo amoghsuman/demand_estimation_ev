@@ -4,8 +4,9 @@ export interface Kpi {
 }
 
 export default function KpiPanel({ kpis }: { kpis: Kpi[] }) {
+  const cols = kpis.length === 4 ? "grid-cols-4" : "grid-cols-3";
   return (
-    <div className="grid grid-cols-3 gap-4">
+    <div className={`grid ${cols} gap-4`}>
       {kpis.map((kpi) => (
         <div key={kpi.label} className="pt-3 border-t border-line">
           <div className="font-display text-2xl text-ink leading-tight">
