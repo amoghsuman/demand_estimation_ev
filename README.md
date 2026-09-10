@@ -1,4 +1,4 @@
-# Ampere Atlas — EV Charging Demand Intelligence (Demo)
+# Ampere Atlas - EV Charging Demand Intelligence (Demo)
 
 A demo dashboard for estimating EV charging demand and identifying white space
 across India, with three role based views: charging network operator,

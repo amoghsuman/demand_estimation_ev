@@ -21,10 +21,10 @@ const METRIC_MAX: Record<MetricKey, number> = {
 };
 
 function colorForValue(value: number, max: number) {
-  // Interpolates from signal teal (low) to copper (high).
+  // Interpolates from jade (low) to brass (high).
   const t = Math.max(0, Math.min(1, value / max));
-  const low = { r: 95, g: 208, b: 192 };
-  const high = { r: 184, g: 131, b: 75 };
+  const low = { r: 44, g: 110, b: 82 };
+  const high = { r: 201, g: 162, b: 39 };
   const r = Math.round(low.r + (high.r - low.r) * t);
   const g = Math.round(low.g + (high.g - low.g) * t);
   const b = Math.round(low.b + (high.b - low.b) * t);
@@ -45,14 +45,11 @@ export default function MapView({ points, metric, onSelect, emphasizeCorridor }:
       attributionControl: true,
     });
     L.control.zoom({ position: "bottomright" }).addTo(map);
-    L.tileLayer(
-      "https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png",
-      {
-        attribution:
-          '&copy; <a href="https://carto.com/attributions">CARTO</a> &copy; OpenStreetMap contributors',
-        maxZoom: 18,
-      }
-    ).addTo(map);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution:
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      maxZoom: 19,
+    }).addTo(map);
     layerGroupRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
 
@@ -80,17 +77,17 @@ export default function MapView({ points, metric, onSelect, emphasizeCorridor }:
       }
       const circle = L.circleMarker([p.lat, p.lng], {
         radius,
-        color: "rgba(232,233,237,0.35)",
+        color: "rgba(27,29,34,0.35)",
         weight: 1,
         fillColor: color,
         fillOpacity,
         className: "point-marker",
       });
       circle.bindPopup(
-        `<div style="font-family: 'Inter', sans-serif; min-width: 180px;">
-          <div style="font-family: 'Fraunces', serif; font-size: 15px; margin-bottom: 4px;">${p.name}</div>
-          <div style="color:#8891A0; font-size:12px; margin-bottom:8px;">${p.city}, ${p.state}</div>
-          <div style="font-size:12px; line-height:1.6;">
+        `<div style="font-family: 'Inter', sans-serif; min-width: 180px; color: #1B1D22;">
+          <div style="font-family: 'Newsreader', serif; font-size: 16px; margin-bottom: 4px;">${p.name}</div>
+          <div style="color:#6B6F76; font-size:11px; margin-bottom:8px;">${p.city}, ${p.state}</div>
+          <div style="font-size:13px; line-height:1.6;">
             Demand score &nbsp;<strong>${p.demandScore}</strong><br/>
             Existing chargers &nbsp;<strong>${p.existingChargers}</strong><br/>
             Gap score &nbsp;<strong>${p.gapScore}</strong>

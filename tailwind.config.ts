@@ -8,18 +8,18 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        graphite: "#10131A",
-        panel: "#171B24",
-        panel2: "#1D2230",
-        line: "#2B303B",
-        ink: "#E8E9ED",
-        muted: "#8891A0",
-        copper: "#B8834B",
-        copperSoft: "#8C6A42",
-        signal: "#5FD0C0",
+        graphite: "#F5F3EE",
+        panel: "#FFFFFF",
+        panel2: "#F0EEE7",
+        line: "#E2DFD6",
+        ink: "#1B1D22",
+        muted: "#6B6F76",
+        copper: "#C9A227",
+        copperSoft: "#A9871F",
+        signal: "#2C6E52",
       },
       fontFamily: {
-        display: ["Fraunces", "Georgia", "serif"],
+        display: ["Newsreader", "Georgia", "serif"],
         sans: ["Inter", "Helvetica", "Arial", "sans-serif"],
       },
     },

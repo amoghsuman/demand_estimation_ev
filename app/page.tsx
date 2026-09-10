@@ -1,9 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import RoleSwitcher from "@/components/RoleSwitcher";
 import KpiPanel from "@/components/KpiPanel";
+import MapLegend from "@/components/MapLegend";
+import LocationDetailPanel from "@/components/LocationDetailPanel";
+import SegmentMixDonut from "@/components/charts/SegmentMixDonut";
+import DemandSupplyChart from "@/components/charts/DemandSupplyChart";
+import StateEvChargerChart from "@/components/charts/StateEvChargerChart";
+import CorridorGapChart from "@/components/charts/CorridorGapChart";
 import RankedTable, { Column } from "@/components/RankedTable";
 import {
   ALL_POINTS,
@@ -13,8 +19,9 @@ import {
   operatorKpis,
   governmentKpis,
   fleetKpis,
+  aggregateSegmentCounts,
 } from "@/lib/data";
-import { DataPoint, Role, StateAggregate } from "@/lib/types";
+import { ChargerRecommendation, DataPoint, Role, StateAggregate } from "@/lib/types";
 import { MetricKey } from "@/components/MapView";
 
 const MapView = dynamic(() => import("@/components/MapView"), { ssr: false });
@@ -24,6 +31,12 @@ const METRIC_OPTIONS: { key: MetricKey; label: string }[] = [
   { key: "demandScore", label: "Demand" },
   { key: "existingChargers", label: "Supply" },
 ];
+
+const CHARGER_TYPE_LABELS: Record<ChargerRecommendation, string> = {
+  "DC fast charger (CCS2)": "DC fast",
+  "AC slow charger or battery swap": "AC slow",
+  "Mixed AC and DC hub": "Mixed",
+};
 
 const ROLE_HEADLINES: Record<Role, { title: string; sub: string }> = {
   operator: {
@@ -35,18 +48,26 @@ const ROLE_HEADLINES: Record<Role, { title: string; sub: string }> = {
     sub: "State level progress toward planned charger density",
   },
   fleet: {
-    title: "Corridor readiness for fleet routes",
-    sub: "Highway stops ranked by distance to the nearest charger",
+    title: "Toll to toll corridor readiness",
+    sub: "Highway stops compared on charging locations, transactions, density, and need",
   },
 };
 
 export default function Home() {
   const [role, setRole] = useState<Role>("operator");
   const [metric, setMetric] = useState<MetricKey>("gapScore");
+  const [selectedPoint, setSelectedPoint] = useState<DataPoint | null>(null);
 
   const opRows = useMemo(() => operatorRows(), []);
   const govRows = useMemo(() => governmentRows(), []);
   const flRows = useMemo(() => fleetRows(), []);
+
+  const handleRoleChange = useCallback((r: Role) => {
+    setRole(r);
+    setSelectedPoint(null);
+  }, []);
+
+  const handleMapSelect = useCallback((p: DataPoint) => setSelectedPoint(p), []);
 
   const kpis =
     role === "operator"
@@ -55,111 +76,147 @@ export default function Home() {
       ? governmentKpis()
       : fleetKpis();
 
+  // Government view reports on the same national urban footprint as the
+  // operator view; only the fleet role narrows the row set to corridors.
+  const nationalMixPoints = role === "fleet" ? flRows : opRows;
+  const nationalMixCounts = useMemo(
+    () => aggregateSegmentCounts(nationalMixPoints),
+    [nationalMixPoints]
+  );
+  const topGapPoints = useMemo(() => opRows.slice(0, 9), [opRows]);
+
   const operatorColumns: Column<DataPoint>[] = [
-    { key: "name", label: "Location", render: (r) => r.name },
-    { key: "city", label: "City", render: (r) => r.city },
+    { key: "name", label: "Location", width: "19%", render: (r) => r.name },
+    { key: "city", label: "City", width: "16%", render: (r) => r.city },
     {
-      key: "category",
-      label: "Category",
-      render: (r) => r.category[0].toUpperCase() + r.category.slice(1),
+      key: "recommendedChargerType",
+      label: "Charger",
+      width: "17%",
+      render: (r) => CHARGER_TYPE_LABELS[r.recommendedChargerType],
     },
-    { key: "demandScore", label: "Demand", align: "right", render: (r) => r.demandScore },
+    {
+      key: "demandScore",
+      label: "Demand",
+      align: "right",
+      width: "16%",
+      render: (r) => r.demandScore,
+    },
     {
       key: "existingChargers",
       label: "Existing",
       align: "right",
+      width: "16%",
       render: (r) => r.existingChargers,
     },
     {
       key: "gapScore",
       label: "Gap score",
       align: "right",
+      width: "16%",
       emphasize: true,
       render: (r) => r.gapScore,
     },
   ];
 
   const governmentColumns: Column<StateAggregate>[] = [
-    { key: "state", label: "State", render: (r) => r.state },
+    { key: "state", label: "State", width: "25%", render: (r) => r.state },
     {
       key: "districtsCovered",
-      label: "Locations",
+      label: "Sites",
       align: "right",
+      width: "12%",
       render: (r) => r.districtsCovered,
     },
     {
       key: "currentChargers",
       label: "Current",
       align: "right",
+      width: "15%",
       render: (r) => r.currentChargers,
     },
     {
       key: "targetChargers",
       label: "Target",
       align: "right",
+      width: "14%",
       render: (r) => r.targetChargers,
     },
     {
       key: "progress",
-      label: "Progress",
+      label: "Prog.",
       align: "right",
+      width: "14%",
       render: (r) => `${Math.round((r.currentChargers / r.targetChargers) * 100)}%`,
     },
     {
       key: "avgGapScore",
       label: "Avg. gap",
       align: "right",
+      width: "20%",
       emphasize: true,
       render: (r) => r.avgGapScore,
     },
   ];
 
   const fleetColumns: Column<DataPoint>[] = [
-    { key: "name", label: "Stop", render: (r) => r.name },
-    { key: "corridorName", label: "Corridor", render: (r) => r.corridorName ?? "" },
+    { key: "name", label: "Stop", width: "28%", render: (r) => r.name },
     {
-      key: "distanceToNearestChargerKm",
-      label: "Nearest charger (km)",
+      key: "existingChargingLocations",
+      label: "Sites",
       align: "right",
-      render: (r) => r.distanceToNearestChargerKm,
+      width: "13%",
+      render: (r) => r.existingChargingLocations ?? 0,
     },
-    { key: "demandScore", label: "Demand", align: "right", render: (r) => r.demandScore },
     {
-      key: "gapScore",
-      label: "Gap score",
+      key: "estimatedDailyTransactions",
+      label: "Daily txns",
       align: "right",
+      width: "18%",
+      render: (r) => (r.estimatedDailyTransactions ?? 0).toLocaleString("en-IN"),
+    },
+    {
+      key: "evDensity",
+      label: "EV density",
+      align: "right",
+      width: "18%",
+      render: (r) => r.evDensity ?? "-",
+    },
+    {
+      key: "needScore",
+      label: "Need score",
+      align: "right",
+      width: "23%",
       emphasize: true,
-      render: (r) => r.gapScore,
+      render: (r) => r.needScore ?? r.gapScore,
     },
   ];
 
   return (
-    <main className="h-screen w-screen flex flex-col bg-graphite">
-      <header className="flex items-center justify-between px-6 py-4 border-b border-line">
-        <div className="flex items-baseline gap-3">
-          <h1 className="font-display text-xl text-ink">Ampere Atlas</h1>
-          <span className="text-xs text-muted hidden sm:inline">
-            EV charging demand intelligence for India
-          </span>
-        </div>
-        <span className="text-xs text-muted">Demo — illustrative data</span>
+    <main className="min-h-screen w-screen flex flex-col bg-graphite">
+      <header className="flex items-center gap-6 px-6 py-4 border-b border-line">
+        <h1 className="font-display text-xl text-ink shrink-0">Ampere Atlas</h1>
+        <RoleSwitcher role={role} onChange={handleRoleChange} />
+        <span className="ml-auto hidden lg:inline text-[11px] text-muted">
+          EV charging demand intelligence for India
+        </span>
       </header>
 
-      <div className="flex flex-1 min-h-0">
+      <div className="flex h-[620px] shrink-0">
         <div className="relative flex-1">
           <MapView
             points={ALL_POINTS}
             metric={metric}
             emphasizeCorridor={role === "fleet"}
+            onSelect={handleMapSelect}
           />
           <div className="absolute top-4 left-4 bg-panel/90 backdrop-blur border border-line rounded-md px-1 py-1 flex gap-1 z-[500]">
             {METRIC_OPTIONS.map((opt) => (
               <button
                 key={opt.key}
                 onClick={() => setMetric(opt.key)}
-                className={`text-xs px-3 py-1.5 rounded transition-colors ${
+                className={`text-[11px] px-3 py-1.5 rounded transition-colors ${
                   metric === opt.key
-                    ? "bg-copper/20 text-copper"
+                    ? "bg-copper/20 text-copperSoft font-medium"
                     : "text-muted hover:text-ink"
                 }`}
               >
@@ -167,36 +224,93 @@ export default function Home() {
               </button>
             ))}
           </div>
+          <MapLegend metric={metric} />
         </div>
 
-        <aside className="w-[400px] shrink-0 border-l border-line bg-panel flex flex-col px-6 py-5 gap-6 overflow-hidden">
-          <RoleSwitcher role={role} onChange={setRole} />
+        <aside className="w-[480px] shrink-0 border-l border-line bg-panel flex flex-col overflow-y-auto">
+          <div className="px-6 pt-5 pb-5 border-b border-line">
+            <KpiPanel kpis={kpis} />
+          </div>
 
-          <KpiPanel kpis={kpis} />
-
-          <div className="flex flex-col min-h-0 flex-1">
-            <h2 className="font-display text-lg text-ink italic">
-              {ROLE_HEADLINES[role].title}
-            </h2>
-            <p className="text-xs text-muted mt-1 mb-3">{ROLE_HEADLINES[role].sub}</p>
-            <div className="flex-1 min-h-0 overflow-y-auto -mr-2 pr-2">
-              {role === "operator" && (
-                <RankedTable columns={operatorColumns} rows={opRows} keyFn={(r) => r.id} />
-              )}
-              {role === "government" && (
-                <RankedTable
-                  columns={governmentColumns}
-                  rows={govRows}
-                  keyFn={(r) => r.state}
-                />
-              )}
-              {role === "fleet" && (
-                <RankedTable columns={fleetColumns} rows={flRows} keyFn={(r) => r.id} />
-              )}
-            </div>
+          <div className="flex flex-col min-h-0 flex-1 px-6 pt-5 pb-5">
+            {selectedPoint ? (
+              <LocationDetailPanel point={selectedPoint} onClose={() => setSelectedPoint(null)} />
+            ) : (
+              <>
+                <h2 className="font-display text-base text-ink italic">
+                  {ROLE_HEADLINES[role].title}
+                </h2>
+                <p className="text-[11px] text-muted mt-1 mb-4">{ROLE_HEADLINES[role].sub}</p>
+                <div className="flex-1 min-h-0 overflow-y-auto -mr-2 pr-2">
+                  {role === "operator" && (
+                    <RankedTable
+                      columns={operatorColumns}
+                      rows={opRows}
+                      keyFn={(r) => r.id}
+                      onRowClick={setSelectedPoint}
+                    />
+                  )}
+                  {role === "government" && (
+                    <RankedTable
+                      columns={governmentColumns}
+                      rows={govRows}
+                      keyFn={(r) => r.state}
+                    />
+                  )}
+                  {role === "fleet" && (
+                    <RankedTable
+                      columns={fleetColumns}
+                      rows={flRows}
+                      keyFn={(r) => r.id}
+                      onRowClick={setSelectedPoint}
+                    />
+                  )}
+                </div>
+              </>
+            )}
           </div>
         </aside>
       </div>
+
+      <section className="border-t border-line px-6 py-6">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <div className="rounded-lg border border-line bg-panel p-5">
+            <h3 className="font-display text-base text-ink">
+              {role === "fleet" ? "Corridor" : "National"} vehicle segment mix
+            </h3>
+            <p className="mb-3 mt-1 text-[11px] text-muted">Total registered EVs by vehicle type</p>
+            <SegmentMixDonut counts={nationalMixCounts} />
+          </div>
+
+          <div className="rounded-lg border border-line bg-panel p-5">
+            {role === "operator" && (
+              <>
+                <h3 className="font-display text-base text-ink">
+                  EV registrations vs. existing chargers
+                </h3>
+                <p className="mb-3 mt-1 text-[11px] text-muted">Top sites by gap score</p>
+                <DemandSupplyChart points={topGapPoints} />
+              </>
+            )}
+            {role === "government" && (
+              <>
+                <h3 className="font-display text-base text-ink">
+                  EV registrations vs. chargers by state
+                </h3>
+                <p className="mb-3 mt-1 text-[11px] text-muted">Ranked by average gap score</p>
+                <StateEvChargerChart states={govRows} />
+              </>
+            )}
+            {role === "fleet" && (
+              <>
+                <h3 className="font-display text-base text-ink">Distance to nearest charger</h3>
+                <p className="mb-3 mt-1 text-[11px] text-muted">All corridor stops, by route</p>
+                <CorridorGapChart points={flRows} />
+              </>
+            )}
+          </div>
+        </div>
+      </section>
     </main>
   );
 }

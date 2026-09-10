@@ -6,8 +6,8 @@ html,
 body {
   padding: 0;
   margin: 0;
-  background-color: #10131a;
-  color: #e8e9ed;
+  background-color: #f5f3ee;
+  color: #1b1d22;
 }
 
 * {
@@ -22,39 +22,39 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background-color: #2b303b;
+  background-color: #b8b5aa;
   border-radius: 4px;
 }
 
 .leaflet-container {
-  background: #10131a !important;
+  background: #f0eee7 !important;
   font-family: "Inter", sans-serif;
 }
 
 .leaflet-control-attribution {
-  background: rgba(16, 19, 26, 0.7) !important;
-  color: #8891a0 !important;
+  background: rgba(255, 255, 255, 0.75) !important;
+  color: #6b6f76 !important;
   font-size: 10px !important;
 }
 .leaflet-control-attribution a {
-  color: #b8834b !important;
+  color: #a9871f !important;
 }
 
 .leaflet-popup-content-wrapper {
-  background: #171b24 !important;
-  color: #e8e9ed !important;
-  border: 1px solid #2b303b;
+  background: #ffffff !important;
+  color: #1b1d22 !important;
+  border: 1px solid #e2dfd6;
   border-radius: 6px;
   box-shadow: none !important;
 }
 .leaflet-popup-tip {
-  background: #171b24 !important;
+  background: #ffffff !important;
 }
 .leaflet-popup-close-button {
-  color: #8891a0 !important;
+  color: #6b6f76 !important;
 }
 
 .point-marker {
   border-radius: 999px;
-  border: 1.5px solid rgba(232, 233, 237, 0.35);
+  border: 1.5px solid rgba(27, 29, 34, 0.35);
 }

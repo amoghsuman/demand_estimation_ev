@@ -1,6 +1,15 @@
-import { AreaCategory, DataPoint, SegmentMix, StateAggregate } from "./types";
+import {
+  AreaCategory,
+  ChargerRecommendation,
+  CityTier,
+  DataPoint,
+  EvDensity,
+  SegmentCounts,
+  SegmentMix,
+  StateAggregate,
+} from "./types";
 
-// Seeded RNG so the demo dataset looks the same on every load.
+// Seeded RNG so the dataset stays consistent across reloads.
 function mulberry32(seed: number) {
   return function () {
     seed |= 0;
@@ -19,7 +28,7 @@ interface Hub {
   state: string;
   lat: number;
   lng: number;
-  tier: 1 | 2 | 3;
+  tier: CityTier;
   subLocations: { name: string; category: AreaCategory }[];
 }
 
@@ -182,33 +191,193 @@ const CORRIDORS: Corridor[] = [
   },
 ];
 
-function segmentMixFor(category: AreaCategory): SegmentMix {
-  switch (category) {
-    case "residential":
-      return { twoWheeler: 55, threeWheeler: 15, fourWheeler: 25, fleet: 5 };
-    case "commercial":
-      return { twoWheeler: 30, threeWheeler: 10, fourWheeler: 45, fleet: 15 };
-    case "industrial":
-      return { twoWheeler: 20, threeWheeler: 25, fourWheeler: 20, fleet: 35 };
-    case "highway":
-      return { twoWheeler: 5, threeWheeler: 5, fourWheeler: 45, fleet: 45 };
+// --- Assumptions (documented in DATA_ASSUMPTIONS.md) ---
+
+const CITY_EV_BASE_RANGE: Record<CityTier, [number, number]> = {
+  1: [40000, 90000],
+  2: [15000, 35000],
+  3: [5000, 12000],
+};
+
+export const CHARGER_RATIO_BENCHMARK: Record<CityTier, [number, number]> = {
+  1: [500, 800],
+  2: [900, 1400],
+  3: [900, 1400],
+};
+
+export const HIGHWAY_CHARGER_RATIO_BENCHMARK: [number, number] = [1500, 3000];
+const HIGHWAY_TRAFFIC_RANGE: [number, number] = [800, 4000];
+
+// Relative charging frequency per vehicle segment: a fleet vehicle or
+// shared 3-wheeler visits a charger far more often per day than a
+// privately owned 2-wheeler or 4-wheeler, so it contributes more to
+// charging demand than its raw count alone would suggest.
+const DEMAND_WEIGHT: SegmentCounts = {
+  twoWheeler: 1.0,
+  threeWheeler: 1.3,
+  fourWheeler: 1.1,
+  fleet: 3.5,
+};
+
+function segmentMixFor(category: AreaCategory, tier: CityTier): SegmentMix {
+  if (category === "residential") {
+    if (tier === 1) return { twoWheeler: 58, threeWheeler: 12, fourWheeler: 24, fleet: 6 };
+    if (tier === 2) return { twoWheeler: 64, threeWheeler: 12, fourWheeler: 18, fleet: 6 };
+    return { twoWheeler: 70, threeWheeler: 10, fourWheeler: 15, fleet: 5 };
   }
+  if (category === "commercial") {
+    if (tier === 1) return { twoWheeler: 32, threeWheeler: 18, fourWheeler: 35, fleet: 15 };
+    if (tier === 2) return { twoWheeler: 38, threeWheeler: 20, fourWheeler: 28, fleet: 14 };
+    return { twoWheeler: 44, threeWheeler: 20, fourWheeler: 22, fleet: 14 };
+  }
+  if (category === "industrial") {
+    if (tier === 1) return { twoWheeler: 20, threeWheeler: 24, fourWheeler: 20, fleet: 36 };
+    if (tier === 2) return { twoWheeler: 23, threeWheeler: 23, fourWheeler: 17, fleet: 37 };
+    return { twoWheeler: 26, threeWheeler: 22, fourWheeler: 14, fleet: 38 };
+  }
+  // highway corridor stops: fleet + 4-wheeler dominant, minimal 2W/3W
+  return { twoWheeler: 5, threeWheeler: 5, fourWheeler: 45, fleet: 45 };
 }
 
-function buildUrbanPoints(): DataPoint[] {
-  const points: DataPoint[] = [];
+// Nudges a category/tier baseline with a small seeded jitter per location,
+// so two sites of the same category never render identical mixes, then
+// renormalizes back to 100 so shares always add up cleanly.
+function jitterSegmentMix(base: SegmentMix): SegmentMix {
+  const jitter = () => between(-6, 6);
+  const raw = {
+    twoWheeler: Math.max(2, base.twoWheeler + jitter()),
+    threeWheeler: Math.max(2, base.threeWheeler + jitter()),
+    fourWheeler: Math.max(2, base.fourWheeler + jitter()),
+    fleet: Math.max(2, base.fleet + jitter()),
+  };
+  return normalizeShareTo100(raw);
+}
+
+function normalizeShareTo100(raw: SegmentMix): SegmentMix {
+  const total = raw.twoWheeler + raw.threeWheeler + raw.fourWheeler + raw.fleet;
+  const scale = 100 / total;
+  const mix = {
+    twoWheeler: Math.round(raw.twoWheeler * scale),
+    threeWheeler: Math.round(raw.threeWheeler * scale),
+    fourWheeler: Math.round(raw.fourWheeler * scale),
+    fleet: Math.round(raw.fleet * scale),
+  };
+  const drift = 100 - (mix.twoWheeler + mix.threeWheeler + mix.fourWheeler + mix.fleet);
+  const largest = (Object.keys(mix) as (keyof SegmentMix)[]).reduce((a, b) =>
+    mix[a] >= mix[b] ? a : b
+  );
+  mix[largest] += drift;
+  return mix;
+}
+
+// Converts a percentage mix into absolute counts that sum exactly to
+// `total`, correcting rounding drift on the largest segment.
+function segmentCountsFromMix(mix: SegmentMix, total: number): SegmentCounts {
+  const raw = {
+    twoWheeler: Math.round((mix.twoWheeler / 100) * total),
+    threeWheeler: Math.round((mix.threeWheeler / 100) * total),
+    fourWheeler: Math.round((mix.fourWheeler / 100) * total),
+    fleet: Math.round((mix.fleet / 100) * total),
+  };
+  const drift = total - (raw.twoWheeler + raw.threeWheeler + raw.fourWheeler + raw.fleet);
+  const largest = (Object.keys(raw) as (keyof SegmentCounts)[]).reduce((a, b) =>
+    raw[a] >= raw[b] ? a : b
+  );
+  raw[largest] += drift;
+  return raw;
+}
+
+// Derives a percentage mix back from absolute counts, so displayed
+// percentages always exactly agree with displayed counts.
+export function mixFromCounts(counts: SegmentCounts): SegmentMix {
+  const total = counts.twoWheeler + counts.threeWheeler + counts.fourWheeler + counts.fleet;
+  if (total === 0) return { twoWheeler: 0, threeWheeler: 0, fourWheeler: 0, fleet: 0 };
+  return normalizeShareTo100({
+    twoWheeler: (counts.twoWheeler / total) * 100,
+    threeWheeler: (counts.threeWheeler / total) * 100,
+    fourWheeler: (counts.fourWheeler / total) * 100,
+    fleet: (counts.fleet / total) * 100,
+  });
+}
+
+// Recommends a charger type from a location's vehicle segment mix: a
+// 4-wheeler/fleet-heavy mix favors DC fast charging, a 2-wheeler/3-wheeler
+// heavy mix favors slower AC or battery swap, otherwise a mixed hub.
+function recommendChargerType(mix: SegmentMix): ChargerRecommendation {
+  const heavyDuty = mix.fourWheeler + mix.fleet;
+  const lightDuty = mix.twoWheeler + mix.threeWheeler;
+  if (heavyDuty > 55) return "DC fast charger (CCS2)";
+  if (lightDuty > 55) return "AC slow charger or battery swap";
+  return "Mixed AC and DC hub";
+}
+
+function demandRawFor(counts: SegmentCounts): number {
+  return (
+    counts.twoWheeler * DEMAND_WEIGHT.twoWheeler +
+    counts.threeWheeler * DEMAND_WEIGHT.threeWheeler +
+    counts.fourWheeler * DEMAND_WEIGHT.fourWheeler +
+    counts.fleet * DEMAND_WEIGHT.fleet
+  );
+}
+
+// Min-max normalizes a set of raw values to a 0-99 scale so locations of
+// very different absolute size become comparable at a glance.
+function normalizeTo99(values: number[]): number[] {
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  if (max === min) return values.map(() => 50);
+  return values.map((v) => Math.round(((v - min) / (max - min)) * 99));
+}
+
+interface UrbanDraft {
+  id: string;
+  name: string;
+  city: string;
+  state: string;
+  lat: number;
+  lng: number;
+  category: AreaCategory;
+  cityTier: CityTier;
+  evRegistrations: number;
+  segmentCounts: SegmentCounts;
+  segmentMix: SegmentMix;
+  existingChargers: number;
+  footfallEstimate: number;
+  distanceToNearestChargerKm: number;
+  demandRaw: number;
+  gapRaw: number;
+}
+
+function buildUrbanDrafts(): UrbanDraft[] {
+  const drafts: UrbanDraft[] = [];
   HUBS.forEach((hub) => {
-    const tierMultiplier = hub.tier === 1 ? 1 : hub.tier === 2 ? 0.75 : 0.55;
+    const [baseMin, baseMax] = CITY_EV_BASE_RANGE[hub.tier];
+    const cityEvTotal = Math.round(between(baseMin, baseMax));
+
+    // Split the city total unevenly across its sub-locations.
+    const weights = hub.subLocations.map(() => between(0.6, 1.6));
+    const weightSum = weights.reduce((s, w) => s + w, 0);
+
     hub.subLocations.forEach((sub, i) => {
       const latOffset = between(-0.06, 0.06);
       const lngOffset = between(-0.06, 0.06);
-      const baseDemand = between(45, 95) * tierMultiplier;
-      const demandScore = round(Math.min(99, baseDemand));
-      const supplyFactor = between(0.15, 0.75);
-      const existingChargers = Math.max(0, Math.round((demandScore / 12) * supplyFactor));
-      const gapScore = round(Math.max(5, Math.min(99, demandScore - existingChargers * 6 + between(-5, 5))));
-      const footfallEstimate = Math.round(demandScore * between(35, 90));
-      points.push({
+
+      const evRegistrations = Math.max(50, Math.round((weights[i] / weightSum) * cityEvTotal));
+
+      const mix = jitterSegmentMix(segmentMixFor(sub.category, hub.tier));
+      const segmentCounts = segmentCountsFromMix(mix, evRegistrations);
+      const segmentMix = mixFromCounts(segmentCounts);
+
+      const [ratioMin, ratioMax] = CHARGER_RATIO_BENCHMARK[hub.tier];
+      const evsPerCharger = between(ratioMin, ratioMax);
+      const existingChargers = Math.max(0, Math.round(evRegistrations / evsPerCharger));
+
+      const demandRaw = demandRawFor(segmentCounts);
+      const gapRaw = evRegistrations / (existingChargers + 1);
+
+      const footfallEstimate = Math.round(evRegistrations * between(1.2, 2.4));
+
+      drafts.push({
         id: `${hub.city}-${i}`.replace(/\s+/g, "-").toLowerCase(),
         name: sub.name,
         city: hub.city,
@@ -216,46 +385,145 @@ function buildUrbanPoints(): DataPoint[] {
         lat: round(hub.lat + latOffset, 4),
         lng: round(hub.lng + lngOffset, 4),
         category: sub.category,
-        demandScore,
+        cityTier: hub.tier,
+        evRegistrations,
+        segmentCounts,
+        segmentMix,
         existingChargers,
-        gapScore,
         footfallEstimate,
-        segmentMix: segmentMixFor(sub.category),
         distanceToNearestChargerKm: round(between(0.5, 6), 1),
-        isCorridor: false,
+        demandRaw,
+        gapRaw,
       });
     });
   });
-  return points;
+  return drafts;
 }
 
-function buildCorridorPoints(): DataPoint[] {
-  const points: DataPoint[] = [];
+interface CorridorDraft {
+  id: string;
+  name: string;
+  city: string;
+  state: string;
+  lat: number;
+  lng: number;
+  evRegistrations: number;
+  segmentCounts: SegmentCounts;
+  segmentMix: SegmentMix;
+  existingChargers: number;
+  existingChargingLocations: number;
+  footfallEstimate: number;
+  distanceToNearestChargerKm: number;
+  corridorName: string;
+  demandRaw: number;
+  gapRaw: number;
+}
+
+// Below 40 the corridor's demand score reads as light transit traffic,
+// above 70 as heavy transit traffic, and Medium in between.
+function evDensityFor(demandScore: number): EvDensity {
+  if (demandScore < 40) return "Low";
+  if (demandScore <= 70) return "Medium";
+  return "High";
+}
+
+function buildCorridorDrafts(): CorridorDraft[] {
+  const drafts: CorridorDraft[] = [];
   CORRIDORS.forEach((corridor) => {
     corridor.waypoints.forEach((wp, i) => {
-      const demandScore = round(between(50, 90));
-      const existingChargers = Math.round(between(0, 3));
-      const gapScore = round(Math.max(10, Math.min(99, demandScore - existingChargers * 10 + between(-5, 10))));
-      points.push({
+      const evRegistrations = Math.round(between(...HIGHWAY_TRAFFIC_RANGE));
+
+      const mix = jitterSegmentMix(segmentMixFor("highway", 1));
+      const segmentCounts = segmentCountsFromMix(mix, evRegistrations);
+      const segmentMix = mixFromCounts(segmentCounts);
+
+      const evsPerCharger = between(...HIGHWAY_CHARGER_RATIO_BENCHMARK);
+      const existingChargers = Math.max(0, Math.round(evRegistrations / evsPerCharger));
+      // A charging location can host more than one charger, so the number
+      // of distinct locations is at or below the charger count.
+      const existingChargingLocations =
+        existingChargers > 0 ? Math.max(1, Math.round(existingChargers * between(0.5, 1))) : 0;
+
+      const demandRaw = demandRawFor(segmentCounts);
+      const gapRaw = evRegistrations / (existingChargers + 1);
+
+      drafts.push({
         id: `${corridor.name}-${i}`.replace(/[^a-z0-9]+/gi, "-").toLowerCase(),
         name: wp.name,
         city: corridor.name,
         state: corridor.state,
         lat: wp.lat,
         lng: wp.lng,
-        category: "highway",
-        demandScore,
+        evRegistrations,
+        segmentCounts,
+        segmentMix,
         existingChargers,
-        gapScore,
-        footfallEstimate: Math.round(demandScore * between(60, 140)),
-        segmentMix: segmentMixFor("highway"),
+        existingChargingLocations,
+        footfallEstimate: Math.round(evRegistrations * between(2, 4)),
         distanceToNearestChargerKm: round(between(8, 45), 1),
-        isCorridor: true,
         corridorName: corridor.name,
+        demandRaw,
+        gapRaw,
       });
     });
   });
-  return points;
+  return drafts;
+}
+
+function buildUrbanPoints(): DataPoint[] {
+  const drafts = buildUrbanDrafts();
+  const demandScores = normalizeTo99(drafts.map((d) => d.demandRaw));
+  const gapScores = normalizeTo99(drafts.map((d) => d.gapRaw));
+  return drafts.map((d, i) => ({
+    id: d.id,
+    name: d.name,
+    city: d.city,
+    state: d.state,
+    lat: d.lat,
+    lng: d.lng,
+    category: d.category,
+    cityTier: d.cityTier,
+    evRegistrations: d.evRegistrations,
+    segmentCounts: d.segmentCounts,
+    segmentMix: d.segmentMix,
+    demandScore: demandScores[i],
+    existingChargers: d.existingChargers,
+    gapScore: gapScores[i],
+    footfallEstimate: d.footfallEstimate,
+    distanceToNearestChargerKm: d.distanceToNearestChargerKm,
+    isCorridor: false,
+    recommendedChargerType: recommendChargerType(d.segmentMix),
+  }));
+}
+
+function buildCorridorPoints(): DataPoint[] {
+  const drafts = buildCorridorDrafts();
+  const demandScores = normalizeTo99(drafts.map((d) => d.demandRaw));
+  const gapScores = normalizeTo99(drafts.map((d) => d.gapRaw));
+  return drafts.map((d, i) => ({
+    id: d.id,
+    name: d.name,
+    city: d.city,
+    state: d.state,
+    lat: d.lat,
+    lng: d.lng,
+    category: "highway" as const,
+    evRegistrations: d.evRegistrations,
+    segmentCounts: d.segmentCounts,
+    segmentMix: d.segmentMix,
+    demandScore: demandScores[i],
+    existingChargers: d.existingChargers,
+    gapScore: gapScores[i],
+    footfallEstimate: d.footfallEstimate,
+    distanceToNearestChargerKm: d.distanceToNearestChargerKm,
+    isCorridor: true,
+    corridorName: d.corridorName,
+    recommendedChargerType: recommendChargerType(d.segmentMix),
+    existingChargingLocations: d.existingChargingLocations,
+    estimatedDailyTransactions: Math.round(demandScores[i] * between(1.5, 3.5)),
+    needScore: gapScores[i],
+    evDensity: evDensityFor(demandScores[i]),
+  }));
 }
 
 export const URBAN_POINTS = buildUrbanPoints();
@@ -267,8 +535,11 @@ export function buildStateAggregates(): StateAggregate[] {
   return states.map((state) => {
     const pts = URBAN_POINTS.filter((p) => p.state === state);
     const currentChargers = pts.reduce((s, p) => s + p.existingChargers, 0);
+    const evRegistrations = pts.reduce((s, p) => s + p.evRegistrations, 0);
     const avgGapScore = round(pts.reduce((s, p) => s + p.gapScore, 0) / pts.length);
-    const targetChargers = Math.round(currentChargers * between(2.2, 3.4) + 20);
+    // Aspirational target: what full coverage would need at the
+    // best-observed (tier-1) benchmark density of 1 charger per 500 EVs.
+    const targetChargers = Math.max(currentChargers + 5, Math.round(evRegistrations / 500));
     return {
       state,
       districtsCovered: pts.length,
@@ -276,7 +547,7 @@ export function buildStateAggregates(): StateAggregate[] {
       ruralCoveragePct: round(between(5, 30)),
       currentChargers,
       targetChargers,
-      evRegistrations: Math.round(currentChargers * between(180, 420)),
+      evRegistrations,
       avgGapScore,
     };
   });
@@ -332,4 +603,18 @@ export function fleetKpis() {
     { label: "Avg. gap distance (km)", value: String(avgDistance) },
     { label: "High-priority stops", value: String(highPriority) },
   ];
+}
+
+// Sums absolute EV counts by segment across whatever points are currently
+// visible, for the sidebar's aggregate segment mix chart.
+export function aggregateSegmentCounts(points: DataPoint[]): SegmentCounts {
+  return points.reduce(
+    (totals, p) => ({
+      twoWheeler: totals.twoWheeler + p.segmentCounts.twoWheeler,
+      threeWheeler: totals.threeWheeler + p.segmentCounts.threeWheeler,
+      fourWheeler: totals.fourWheeler + p.segmentCounts.fourWheeler,
+      fleet: totals.fleet + p.segmentCounts.fleet,
+    }),
+    { twoWheeler: 0, threeWheeler: 0, fourWheeler: 0, fleet: 0 }
+  );
 }

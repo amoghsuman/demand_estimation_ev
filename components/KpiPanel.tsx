@@ -11,7 +11,7 @@ export default function KpiPanel({ kpis }: { kpis: Kpi[] }) {
           <div className="font-display text-2xl text-ink leading-tight">
             {kpi.value}
           </div>
-          <div className="text-xs text-muted mt-1">{kpi.label}</div>
+          <div className="text-[11px] text-muted mt-1">{kpi.label}</div>
         </div>
       ))}
     </div>
