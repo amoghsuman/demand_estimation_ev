@@ -712,6 +712,15 @@ export const URBAN_POINTS = buildUrbanPoints();
 export const CORRIDOR_POINTS = buildCorridorPoints();
 export const ALL_POINTS: DataPoint[] = [...URBAN_POINTS, ...CORRIDOR_POINTS];
 
+export function getTopDemandHotspots(limit = 5): DataPoint[] {
+  return [...ALL_POINTS]
+    .sort((a, b) => {
+      if (b.demandScore !== a.demandScore) return b.demandScore - a.demandScore;
+      return b.evRegistrations - a.evRegistrations;
+    })
+    .slice(0, limit);
+}
+
 export function buildStateAggregates(): StateAggregate[] {
   const states = Array.from(new Set(URBAN_POINTS.map((p) => p.state)));
   return states.map((state) => {
@@ -809,32 +818,347 @@ export function formatShortfall(needed: number, existing: number, shortfall: num
   return `Needs ${needed}, has ${existing}, short by ${shortfall}`;
 }
 
+export interface CityShortfallSummary {
+  city: string;
+  shortfall: number;
+  sitesCount: number;
+  totalEvs: number;
+  existingChargers: number;
+  chargersNeeded: number;
+  avgGapScore: number;
+  topDeficitSite: { name: string; shortfall: number; gapScore: number };
+}
+
 // Total shortfall (chargersNeeded - existingChargers, already floored at
 // zero per point) summed by city, for the operator "which city needs the
-// most attention" chart.
-export function cityShortfalls(points: DataPoint[]): { city: string; shortfall: number }[] {
-  const totals = new Map<string, number>();
+// most attention" chart, enriched with precise city aggregates.
+export function cityShortfalls(points: DataPoint[]): CityShortfallSummary[] {
+  const map = new Map<string, {
+    shortfall: number;
+    sitesCount: number;
+    totalEvs: number;
+    existingChargers: number;
+    chargersNeeded: number;
+    gapScores: number[];
+    topDeficitSite: { name: string; shortfall: number; gapScore: number };
+  }>();
+
   points.forEach((p) => {
-    totals.set(p.city, (totals.get(p.city) ?? 0) + p.shortfall);
+    const existing = map.get(p.city);
+    if (!existing) {
+      map.set(p.city, {
+        shortfall: p.shortfall,
+        sitesCount: 1,
+        totalEvs: p.evRegistrations,
+        existingChargers: p.existingChargingLocations ?? 0,
+        chargersNeeded: p.chargersNeeded,
+        gapScores: [p.gapScore],
+        topDeficitSite: { name: p.name, shortfall: p.shortfall, gapScore: p.gapScore },
+      });
+    } else {
+      existing.shortfall += p.shortfall;
+      existing.sitesCount += 1;
+      existing.totalEvs += p.evRegistrations;
+      existing.existingChargers += p.existingChargingLocations ?? 0;
+      existing.chargersNeeded += p.chargersNeeded;
+      existing.gapScores.push(p.gapScore);
+      if (p.shortfall > existing.topDeficitSite.shortfall) {
+        existing.topDeficitSite = { name: p.name, shortfall: p.shortfall, gapScore: p.gapScore };
+      }
+    }
   });
-  return Array.from(totals, ([city, shortfall]) => ({ city, shortfall })).sort(
-    (a, b) => b.shortfall - a.shortfall
-  );
+
+  return Array.from(map, ([city, d]) => ({
+    city,
+    shortfall: d.shortfall,
+    sitesCount: d.sitesCount,
+    totalEvs: d.totalEvs,
+    existingChargers: d.existingChargers,
+    chargersNeeded: d.chargersNeeded,
+    avgGapScore: round(d.gapScores.reduce((a, b) => a + b, 0) / d.gapScores.length),
+    topDeficitSite: d.topDeficitSite,
+  })).sort((a, b) => b.shortfall - a.shortfall);
+}
+
+export interface CategoryGapSummary {
+  category: AreaCategory;
+  avgGapScore: number;
+  sitesCount: number;
+  totalShortfall: number;
+  totalEvs: number;
+  existingChargers: number;
+  chargersNeeded: number;
 }
 
 const CATEGORY_ORDER: AreaCategory[] = ["residential", "commercial", "industrial", "highway"];
 
-// Average gap score per area category across whatever points are passed
-// in, so patterns by area type are visible independent of location or
-// state.
+// Average gap score and precise aggregates per area category across whatever points are passed
+// in, so patterns by area type are visible independent of location or state.
 export function categoryGapBreakdown(
   points: DataPoint[]
-): { category: AreaCategory; avgGapScore: number }[] {
+): CategoryGapSummary[] {
   return CATEGORY_ORDER.map((category) => {
     const pts = points.filter((p) => p.category === category);
+    const sitesCount = pts.length;
+    const avgGapScore = sitesCount > 0 ? round(pts.reduce((s, p) => s + p.gapScore, 0) / sitesCount) : 0;
+    const totalShortfall = pts.reduce((s, p) => s + p.shortfall, 0);
+    const totalEvs = pts.reduce((s, p) => s + p.evRegistrations, 0);
+    const existingChargers = pts.reduce((s, p) => s + (p.existingChargingLocations ?? 0), 0);
+    const chargersNeeded = pts.reduce((s, p) => s + p.chargersNeeded, 0);
+
     return {
       category,
-      avgGapScore: round(pts.reduce((s, p) => s + p.gapScore, 0) / pts.length),
+      avgGapScore,
+      sitesCount,
+      totalShortfall,
+      totalEvs,
+      existingChargers,
+      chargersNeeded,
     };
   }).filter((row) => points.some((p) => p.category === row.category));
+}
+
+// =============================================================================
+// 5-YEAR EV REGISTRATION GROWTH PROJECTION MODELS
+// =============================================================================
+
+export type GrowthScenario = "conservative" | "base" | "accelerated";
+
+export interface GrowthYearData {
+  year: number;
+  label: string;
+  totalEvs: number;
+  twoWheeler: number;
+  threeWheeler: number;
+  fourWheeler: number;
+  fleet: number;
+  chargersNeeded: number;
+  newAdditions: number;
+  growthRatePct: number;
+}
+
+export interface GrowthProjectionResult {
+  targetName: string;
+  targetType: "region" | "corridor" | "site";
+  baseYear: number;
+  endYear: number;
+  baseEvs: number;
+  endEvs: number;
+  cagrPct: number;
+  totalMultiple: number;
+  existingChargers: number;
+  endChargersNeeded: number;
+  newChargersRequired: number;
+  years: GrowthYearData[];
+}
+
+const SEGMENT_ANNUAL_RATES = {
+  // 5 annual growth rates for years 2027 through 2031
+  twoWheeler: [0.38, 0.35, 0.32, 0.29, 0.26],
+  threeWheeler: [0.34, 0.32, 0.29, 0.26, 0.23],
+  fourWheeler: [0.48, 0.46, 0.42, 0.38, 0.34],
+  fleet: [0.40, 0.38, 0.35, 0.31, 0.28],
+};
+
+const SCENARIO_MULTIPLIERS: Record<GrowthScenario, number> = {
+  conservative: 0.75,
+  base: 1.0,
+  accelerated: 1.25,
+};
+
+export function calculateEvGrowthProjection(
+  baseCounts: SegmentCounts,
+  targetName: string,
+  targetType: "region" | "corridor" | "site",
+  existingChargers: number,
+  isCorridor: boolean,
+  scenario: GrowthScenario = "base",
+  baseYear: number = 2026
+): GrowthProjectionResult {
+  const mult = SCENARIO_MULTIPLIERS[scenario];
+  const baseTotal =
+    baseCounts.twoWheeler +
+    baseCounts.threeWheeler +
+    baseCounts.fourWheeler +
+    baseCounts.fleet;
+
+  // Charger ratio benchmark: 1 per 500 for urban; 1 per 40 for highway corridor transit
+  const benchmarkRatio = isCorridor ? 40 : 500;
+  const initialNeeded = Math.round(baseTotal / benchmarkRatio);
+
+  const years: GrowthYearData[] = [
+    {
+      year: baseYear,
+      label: String(baseYear),
+      totalEvs: baseTotal,
+      twoWheeler: baseCounts.twoWheeler,
+      threeWheeler: baseCounts.threeWheeler,
+      fourWheeler: baseCounts.fourWheeler,
+      fleet: baseCounts.fleet,
+      chargersNeeded: initialNeeded,
+      newAdditions: 0,
+      growthRatePct: 0,
+    },
+  ];
+
+  let curr2W = baseCounts.twoWheeler;
+  let curr3W = baseCounts.threeWheeler;
+  let curr4W = baseCounts.fourWheeler;
+  let currFleet = baseCounts.fleet;
+  let prevTotal = baseTotal;
+
+  for (let i = 0; i < 5; i++) {
+    const yr = baseYear + i + 1;
+    curr2W = Math.round(curr2W * (1 + SEGMENT_ANNUAL_RATES.twoWheeler[i] * mult));
+    curr3W = Math.round(curr3W * (1 + SEGMENT_ANNUAL_RATES.threeWheeler[i] * mult));
+    curr4W = Math.round(curr4W * (1 + SEGMENT_ANNUAL_RATES.fourWheeler[i] * mult));
+    currFleet = Math.round(currFleet * (1 + SEGMENT_ANNUAL_RATES.fleet[i] * mult));
+
+    const totalEvs = curr2W + curr3W + curr4W + currFleet;
+    const additions = totalEvs - prevTotal;
+    const growthRatePct = round(((totalEvs - prevTotal) / prevTotal) * 100, 1);
+    const chargersNeeded = Math.round(totalEvs / benchmarkRatio);
+
+    years.push({
+      year: yr,
+      label: String(yr),
+      totalEvs,
+      twoWheeler: curr2W,
+      threeWheeler: curr3W,
+      fourWheeler: curr4W,
+      fleet: currFleet,
+      chargersNeeded,
+      newAdditions: additions,
+      growthRatePct,
+    });
+
+    prevTotal = totalEvs;
+  }
+
+  const endEvs = years[years.length - 1].totalEvs;
+  const endChargersNeeded = years[years.length - 1].chargersNeeded;
+  const cagrPct = round((Math.pow(endEvs / Math.max(baseTotal, 1), 1 / 5) - 1) * 100, 1);
+  const totalMultiple = round(endEvs / Math.max(baseTotal, 1), 1);
+  const newChargersRequired = Math.max(0, endChargersNeeded - existingChargers);
+
+  return {
+    targetName,
+    targetType,
+    baseYear,
+    endYear: baseYear + 5,
+    baseEvs: baseTotal,
+    endEvs,
+    cagrPct,
+    totalMultiple,
+    existingChargers,
+    endChargersNeeded,
+    newChargersRequired,
+    years,
+  };
+}
+
+export function getGrowthProjectionForPoint(
+  point: DataPoint,
+  scenario: GrowthScenario = "base"
+): GrowthProjectionResult {
+  return calculateEvGrowthProjection(
+    point.segmentCounts,
+    point.name,
+    "site",
+    point.existingChargers,
+    point.isCorridor,
+    scenario
+  );
+}
+
+export function getGrowthProjectionForRegion(
+  cityName: string,
+  scenario: GrowthScenario = "base"
+): GrowthProjectionResult {
+  const pts = URBAN_POINTS.filter((p) => p.city.toLowerCase() === cityName.toLowerCase());
+  const counts = aggregateSegmentCounts(pts.length > 0 ? pts : URBAN_POINTS);
+  const existingChargers = pts.reduce((s, p) => s + p.existingChargers, 0);
+
+  return calculateEvGrowthProjection(
+    counts,
+    cityName,
+    "region",
+    existingChargers,
+    false,
+    scenario
+  );
+}
+
+export function getGrowthProjectionForCorridor(
+  corridorName: string,
+  scenario: GrowthScenario = "base"
+): GrowthProjectionResult {
+  const pts = CORRIDOR_POINTS.filter(
+    (p) => p.corridorName?.toLowerCase() === corridorName.toLowerCase()
+  );
+  const counts = aggregateSegmentCounts(pts.length > 0 ? pts : CORRIDOR_POINTS);
+  const existingChargers = pts.reduce((s, p) => s + p.existingChargers, 0);
+
+  return calculateEvGrowthProjection(
+    counts,
+    corridorName,
+    "corridor",
+    existingChargers,
+    true,
+    scenario
+  );
+}
+
+export interface SelectableRegionOrCorridor {
+  id: string;
+  name: string;
+  type: "region" | "corridor";
+  evCount: number;
+  pointCount: number;
+  stateOrSpan: string;
+}
+
+export function getAllSelectableRegionsAndCorridors(): SelectableRegionOrCorridor[] {
+  const regionsMap = new Map<string, { evs: number; count: number; state: string }>();
+  URBAN_POINTS.forEach((p) => {
+    const prev = regionsMap.get(p.city);
+    if (!prev) {
+      regionsMap.set(p.city, { evs: p.evRegistrations, count: 1, state: p.state });
+    } else {
+      prev.evs += p.evRegistrations;
+      prev.count += 1;
+    }
+  });
+
+  const regions: SelectableRegionOrCorridor[] = Array.from(regionsMap, ([city, d]) => ({
+    id: `reg-${city.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+    name: city,
+    type: "region" as const,
+    evCount: d.evs,
+    pointCount: d.count,
+    stateOrSpan: d.state,
+  })).sort((a, b) => b.evCount - a.evCount);
+
+  const corridorMap = new Map<string, { evs: number; count: number; state: string }>();
+  CORRIDOR_POINTS.forEach((p) => {
+    const cName = p.corridorName ?? "Highway";
+    const prev = corridorMap.get(cName);
+    if (!prev) {
+      corridorMap.set(cName, { evs: p.evRegistrations, count: 1, state: p.state });
+    } else {
+      prev.evs += p.evRegistrations;
+      prev.count += 1;
+    }
+  });
+
+  const corridors: SelectableRegionOrCorridor[] = Array.from(corridorMap, ([corridor, d]) => ({
+    id: `cor-${corridor.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+    name: corridor,
+    type: "corridor" as const,
+    evCount: d.evs,
+    pointCount: d.count,
+    stateOrSpan: d.state,
+  })).sort((a, b) => b.evCount - a.evCount);
+
+  return [...regions, ...corridors];
 }

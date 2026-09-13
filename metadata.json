@@ -1,0 +1,8 @@
+{
+  "name": "Ampere Atlas - EV Charging Demand Intelligence",
+  "description": "Demand estimation and white space mapping for EV charging infrastructure across India.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
