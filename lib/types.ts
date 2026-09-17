@@ -61,6 +61,81 @@ export interface DataPoint {
   estimatedDailyTransactions?: number;
   needScore?: number;
   evDensity?: EvDensity;
+  // Electrical Substation & Grid telemetry
+  substation?: SubstationData;
+  // Active charger utilization profile at site
+  chargerUtilizations?: ChargerTypeUtilization[];
+  // Nearest highway toll plaza if applicable
+  nearestTollPlazaId?: string;
+}
+
+export interface HourlyTollFlow {
+  hour: number; // 0 to 23
+  timeLabel: string; // "00:00", "01:00", etc.
+  totalEvs: number;
+  fourWheeler: number; // Private EVs & fleet cabs
+  fleetCommercial: number; // Light commercial vans & 3-wheelers
+  evBusesTrucks: number; // Heavy electric buses & transport trucks
+  totalVehiclesAllFuel: number; // Total traffic passing toll
+  evSharePct: number;
+}
+
+export interface TollPlaza {
+  id: string;
+  name: string;
+  highwayCode: string; // e.g. "NH48", "NE1", "NH44"
+  corridorName: string;
+  state: string;
+  lat: number;
+  lng: number;
+  totalDailyVehicles: number;
+  totalDailyEvs: number;
+  evSharePct: number;
+  peakHour: number; // e.g. 9 for 09:00 - 10:00
+  peakHourEvVolume: number;
+  peakHourTimeLabel: string;
+  offPeakHour: number;
+  offPeakEvVolume: number;
+  fastTagLanes: number;
+  dedicatedEvFastChargeLanes: boolean;
+  hourlyFlow: HourlyTollFlow[];
+  recommendedTollChargerCapacityMw: number;
+}
+
+export interface ChargerTypeUtilization {
+  chargerType: string; // e.g. "240 kW Ultra-Fast DC", "120 kW Dual-Gun DC", "60 kW Fast DC", "22 kW Type-2 AC", "3.3 kW Slow AC"
+  category: "dc-ultra" | "dc-fast" | "ac-fast" | "ac-slow";
+  powerKw: number;
+  connector: string; // "CCS2", "Type-2", "Bharat DC-001", "GB/T"
+  totalGunsDeployed: number;
+  avgUtilizationPct: number; // 0 - 100%
+  peakUtilizationPct: number;
+  peakHours: string; // e.g. "17:00 - 21:00"
+  avgSessionsPerDayPerGun: number;
+  avgDwellMinutes: number;
+  avgEnergyDispensedKwhPerDay: number;
+  avgQueueWaitMinutes: number;
+  uptimePct: number;
+  status: "overcapacity" | "optimal" | "underutilized";
+  estimatedMonthlyRevenueInr: number;
+}
+
+export interface SubstationData {
+  id: string;
+  name: string;
+  discom: string; // e.g. "BESCOM", "MSEDCL", "DHBVN", "TANGEDCO", "Tata Power-DDL"
+  voltageRating: string; // e.g. "66/11 kV", "33/11 kV", "132/33 kV"
+  distanceKm: number;
+  transformerCapacityMva: number;
+  currentPeakLoadMva: number;
+  availableHeadroomMva: number;
+  loadUtilizationPct: number;
+  dedicatedEvFeederAvailable: boolean;
+  feederStatus: "Dedicated 11kV Available" | "Shared Feeder - High Capacity" | "Feeder Congested - Augmentation Required";
+  energizationLeadTimeDays: number;
+  powerCostPerUnitInr: number; // e.g. 6.85
+  lat: number;
+  lng: number;
 }
 
 export interface StateAggregate {

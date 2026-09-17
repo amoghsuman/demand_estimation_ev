@@ -12,7 +12,10 @@ import {
   Columns,
   Filter,
   Flame,
+  Gauge,
+  Info,
   Layers,
+  Navigation,
   PieChart,
   Search,
   ShieldCheck,
@@ -35,7 +38,10 @@ import CorridorGapChart from "@/components/charts/CorridorGapChart";
 import CityShortfallChart from "@/components/charts/CityShortfallChart";
 import CategoryGapChart from "@/components/charts/CategoryGapChart";
 import EvGrowthProjectionChart from "@/components/charts/EvGrowthProjectionChart";
+import TollFlowChart from "@/components/charts/TollFlowChart";
+import ChargerUtilizationChart from "@/components/charts/ChargerUtilizationChart";
 import RankedTable, { Column } from "@/components/RankedTable";
+import { TOLL_PLAZAS, SUBSTATIONS } from "@/lib/tollAndGridData";
 import {
   ALL_POINTS,
   operatorRows,
@@ -264,6 +270,12 @@ export default function Home() {
   const [selectedPoint, setSelectedPoint] = useState<DataPoint | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterPreset, setFilterPreset] = useState<string>("all");
+
+  // Operational overlay layers & toll state
+  const [showTollPlazas, setShowTollPlazas] = useState<boolean>(false);
+  const [showSubstations, setShowSubstations] = useState<boolean>(false);
+  const [selectedTollId, setSelectedTollId] = useState<string>("toll-kherki-daula");
+  const [showDataProvenanceModal, setShowDataProvenanceModal] = useState<boolean>(false);
 
   // Side-by-side comparison state
   const [isCompareMode, setIsCompareMode] = useState<boolean>(false);
@@ -676,7 +688,7 @@ export default function Home() {
 
   return (
     <main className="min-h-screen w-screen flex flex-col bg-graphite">
-      <header className="flex items-center gap-4 sm:gap-6 px-4 sm:px-6 py-3.5 border-b border-line flex-wrap sm:flex-nowrap">
+      <header className="flex items-center gap-3 sm:gap-5 px-4 sm:px-6 py-3.5 border-b border-line flex-wrap sm:flex-nowrap">
         <h1 className="font-display text-xl text-ink shrink-0">Ampere Atlas</h1>
         <RoleSwitcher role={role} onChange={handleRoleChange} />
 
@@ -687,6 +699,16 @@ export default function Home() {
           <span className="text-slate-300">·</span>
           <span className="text-[11px] text-slate-600">Map &amp; Ranked Table</span>
         </div>
+
+        <button
+          type="button"
+          onClick={() => setShowDataProvenanceModal(true)}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200/80 border border-slate-300 text-slate-800 text-[11px] font-semibold transition-colors shadow-2xs"
+          title="Inspect data modeling methodology, synthetic calibration, and telemetry sources"
+        >
+          <Info className="h-3.5 w-3.5 text-copper shrink-0" />
+          <span>Data Calibration &amp; Methodology</span>
+        </button>
 
         <span className="ml-auto hidden xl:inline text-[11px] text-muted">
           EV charging demand intelligence for India
@@ -710,6 +732,13 @@ export default function Home() {
             onSelectComparePoint={handleSelectComparePoint}
             showHotspots={showHotspots}
             hotspotPoints={topHotspots}
+            showTollPlazas={showTollPlazas}
+            showSubstations={showSubstations}
+            onSelectToll={(tollId) => {
+              setSelectedTollId(tollId);
+              const el = document.getElementById("toll-flow-analytics-section");
+              if (el) el.scrollIntoView({ behavior: "smooth" });
+            }}
           />
           <div className="absolute top-4 left-4 bg-panel/90 backdrop-blur border border-line rounded-md px-1.5 py-1 flex items-center gap-1.5 z-[500] shadow-sm">
             <div className="flex items-center gap-1">
@@ -773,6 +802,60 @@ export default function Home() {
                 }`}
               >
                 5
+              </span>
+            </button>
+
+            <div className="h-4 w-px bg-line/80 mx-0.5" />
+
+            {/* Toll Plazas Layer Toggle */}
+            <button
+              id="map-toll-plazas-toggle-btn"
+              type="button"
+              onClick={() => setShowTollPlazas((prev) => !prev)}
+              className={`text-[11px] px-2.5 py-1.5 rounded flex items-center gap-1.5 transition-all ${
+                showTollPlazas
+                  ? "bg-amber-100 text-amber-950 border border-amber-400 font-bold shadow-xs"
+                  : "text-muted hover:text-ink hover:bg-panel border border-transparent"
+              }`}
+              title="Toggle highway toll plazas showing hourly EV flow & FASTag traffic"
+            >
+              <Car className={`h-3.5 w-3.5 ${showTollPlazas ? "text-amber-800" : "text-slate-500"}`} />
+              <span>Tolls</span>
+              <span
+                className={`inline-flex items-center justify-center px-1.5 py-0.2 rounded-full text-[9px] font-bold ${
+                  showTollPlazas
+                    ? "bg-amber-800 text-white"
+                    : "bg-panel border border-line text-muted"
+                }`}
+              >
+                {TOLL_PLAZAS.length}
+              </span>
+            </button>
+
+            <div className="h-4 w-px bg-line/80 mx-0.5" />
+
+            {/* Electrical Substations Layer Toggle */}
+            <button
+              id="map-substations-toggle-btn"
+              type="button"
+              onClick={() => setShowSubstations((prev) => !prev)}
+              className={`text-[11px] px-2.5 py-1.5 rounded flex items-center gap-1.5 transition-all ${
+                showSubstations
+                  ? "bg-indigo-100 text-indigo-950 border border-indigo-400 font-bold shadow-xs"
+                  : "text-muted hover:text-ink hover:bg-panel border border-transparent"
+              }`}
+              title="Toggle electrical distribution substations showing EV headroom & feeder capacity"
+            >
+              <Zap className={`h-3.5 w-3.5 ${showSubstations ? "text-indigo-800" : "text-slate-500"}`} />
+              <span>Substations</span>
+              <span
+                className={`inline-flex items-center justify-center px-1.5 py-0.2 rounded-full text-[9px] font-bold ${
+                  showSubstations
+                    ? "bg-indigo-800 text-white"
+                    : "bg-panel border border-line text-muted"
+                }`}
+              >
+                {SUBSTATIONS.length}
               </span>
             </button>
 
@@ -876,6 +959,11 @@ export default function Home() {
                 point={selectedPoint}
                 onClose={() => setSelectedPoint(null)}
                 onCompare={handleStartCompare}
+                onOpenToll={(tollId) => {
+                  setSelectedTollId(tollId);
+                  const el = document.getElementById("toll-flow-analytics-section");
+                  if (el) el.scrollIntoView({ behavior: "smooth" });
+                }}
               />
             ) : (
               <>
@@ -1307,8 +1395,157 @@ export default function Home() {
               <EvGrowthProjectionChart selectedPoint={selectedPoint} />
             </div>
           </div>
+
+          {/* Corridor Toll Flow Analytics & 24-Hour Diurnal Profile */}
+          <div id="toll-flow-analytics-section" className={`${CARD_CLASS} lg:col-span-2 scroll-mt-6`}>
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
+              <div>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-950 border border-amber-300 mb-1.5">
+                  HIGHWAY TELEMETRY &amp; DIURNAL TRAFFIC
+                </span>
+                <h3 className={HEADING_CLASS}>
+                  <Car className="h-4 w-4 text-amber-700 shrink-0" />
+                  <span>Corridor Toll Flow Analytics &amp; Hourly EV Transit Profile</span>
+                </h3>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <label htmlFor="toll-select-dropdown" className="text-xs font-bold text-slate-700">
+                  Select Toll Plaza:
+                </label>
+                <select
+                  id="toll-select-dropdown"
+                  value={selectedTollId}
+                  onChange={(e) => setSelectedTollId(e.target.value)}
+                  className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-900 shadow-2xs focus:border-copper focus:outline-none focus:ring-1 focus:ring-copper"
+                >
+                  {TOLL_PLAZAS.map((toll) => (
+                    <option key={toll.id} value={toll.id}>
+                      {toll.name} ({toll.highwayCode} · {toll.state}) - {toll.totalDailyEvs.toLocaleString("en-IN")} EVs/day
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <p className={SUBTEXT_CLASS}>
+              24-hour diurnal FASTag volume distribution, hourly EV transit curve, and automated fast-charging capacity sizing
+            </p>
+            <div className="mt-3">
+              <TollFlowChart tollId={selectedTollId} />
+            </div>
+          </div>
+
+          {/* Multi-Charger Utilization Benchmarks & Bottleneck Audit */}
+          <div className={`${CARD_CLASS} lg:col-span-2`}>
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
+              <div>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-950 border border-emerald-300 mb-1.5">
+                  DISPATCH &amp; ASSET UTILIZATION
+                </span>
+                <h3 className={HEADING_CLASS}>
+                  <Gauge className="h-4 w-4 text-emerald-700 shrink-0" />
+                  <span>Charger Utilization Rates, Dwell Times &amp; Queue Delay Benchmarks</span>
+                </h3>
+              </div>
+            </div>
+            <p className={SUBTEXT_CLASS}>
+              Operational efficiency and bottleneck risk across AC Slow (3.3kW / 7.4kW), Fast DC (30kW / 60kW), and High-Power DC (120kW / 240kW) chargers
+            </p>
+            <div className="mt-3">
+              <ChargerUtilizationChart locationPoint={selectedPoint} />
+            </div>
+          </div>
         </div>
       </section>
+
+      {/* Data Provenance & Methodology Modal */}
+      {showDataProvenanceModal && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs"
+        >
+          <div className="relative w-full max-w-2xl max-h-[85vh] overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl border border-slate-200">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
+              <div>
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-950 border border-amber-300">
+                  TRANSPARENCY &amp; METHODOLOGY
+                </span>
+                <h2 className="font-display text-xl font-bold text-slate-950 mt-1">
+                  Data Architecture &amp; Calibration Methodology
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDataProvenanceModal(false)}
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-800 transition-colors"
+                aria-label="Close modal"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-4 text-xs text-slate-700 leading-relaxed">
+              <div className="rounded-xl bg-amber-50/70 border border-amber-200 p-3.5">
+                <h3 className="font-bold text-amber-950 text-sm mb-1">
+                  Are we using dummy data in Ampere Atlas?
+                </h3>
+                <p>
+                  Ampere Atlas utilizes <strong>statistically calibrated benchmark models</strong> derived from real-world empirical distributions and statutory policy guidelines, rather than direct live IoT API feeds from individual charging stations.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="p-3 rounded-xl border border-slate-200 bg-slate-50/50">
+                  <h4 className="font-bold text-slate-900 text-xs mb-1 flex items-center gap-1.5">
+                    <Car className="h-3.5 w-3.5 text-amber-600" /> Highway Toll Flow &amp; FASTag Data
+                  </h4>
+                  <p className="text-[11px] text-slate-600">
+                    Calibrated against NHAI FASTag hourly traffic distributions across national expressways (NH-48, Mumbai-Pune Expressway, Yamuna Expressway, etc.), mapping diurnal peak transit curves between 07:00–10:00 and 17:00–21:00.
+                  </p>
+                </div>
+
+                <div className="p-3 rounded-xl border border-slate-200 bg-slate-50/50">
+                  <h4 className="font-bold text-slate-900 text-xs mb-1 flex items-center gap-1.5">
+                    <Zap className="h-3.5 w-3.5 text-indigo-600" /> Electrical Substation &amp; Grid Headroom
+                  </h4>
+                  <p className="text-[11px] text-slate-600">
+                    Derived from State DISCOM 11kV/33kV feeder loading norms, HT-2 industrial tariffs, transformer peak MVA thresholds, and statutory energization timelines for high-capacity EV charging loads.
+                  </p>
+                </div>
+
+                <div className="p-3 rounded-xl border border-slate-200 bg-slate-50/50">
+                  <h4 className="font-bold text-slate-900 text-xs mb-1 flex items-center gap-1.5">
+                    <Gauge className="h-3.5 w-3.5 text-emerald-600" /> Charger Utilization Benchmarks
+                  </h4>
+                  <p className="text-[11px] text-slate-600">
+                    Modeled using empirical CPO telemetry averages across slow AC (3.3/7.4 kW), fast DC (30/60 kW), and high-power DC (120/240 kW) guns, capturing queue probability and optimal revenue thresholds (55–75%).
+                  </p>
+                </div>
+
+                <div className="p-3 rounded-xl border border-slate-200 bg-slate-50/50">
+                  <h4 className="font-bold text-slate-900 text-xs mb-1 flex items-center gap-1.5">
+                    <ShieldCheck className="h-3.5 w-3.5 text-cyan-600" /> VAHAN &amp; MoP Policy Norms
+                  </h4>
+                  <p className="text-[11px] text-slate-600">
+                    EV fleet counts, segment distributions (2W, 3W, 4W, Bus), and 1:500 guideline targets are benchmarked against official VAHAN dashboards and Ministry of Power guidelines.
+                  </p>
+                </div>
+              </div>
+
+              <div className="border-t border-slate-100 pt-3 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowDataProvenanceModal(false)}
+                  className="px-4 py-2 rounded-lg bg-slate-900 text-white font-bold text-xs hover:bg-slate-800 transition-colors shadow-2xs"
+                >
+                  Understood
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

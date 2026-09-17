@@ -14,8 +14,9 @@ if (typeof window !== "undefined") {
 import "leaflet.heat";
 import { Flame } from "lucide-react";
 
-import { DataPoint } from "@/lib/types";
+import { DataPoint, TollPlaza, SubstationData } from "@/lib/types";
 import { formatShortfall, getTopDemandHotspots } from "@/lib/data";
+import { TOLL_PLAZAS, SUBSTATIONS } from "@/lib/tollAndGridData";
 
 export type MetricKey = "gapScore" | "demandScore" | "existingChargers";
 
@@ -43,6 +44,10 @@ interface Props {
   hotspotPoints?: DataPoint[];
   // Simulated future EV adoption load percentage (0, 20, 50, 100)
   futureLoadPct?: number;
+  // Operational layers: Toll Plazas and Electrical Substations
+  showTollPlazas?: boolean;
+  showSubstations?: boolean;
+  onSelectToll?: (tollId: string) => void;
 }
 
 const METRIC_MAX: Record<MetricKey, number> = {
@@ -228,6 +233,9 @@ export default function MapView({
   showHotspots = false,
   hotspotPoints,
   futureLoadPct = 0,
+  showTollPlazas = false,
+  showSubstations = false,
+  onSelectToll,
 }: Props) {
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -235,6 +243,8 @@ export default function MapView({
   const corridorLayerRef = useRef<L.LayerGroup | null>(null);
   const heatLayerRef = useRef<L.HeatLayer | null>(null);
   const hotspotsLayerRef = useRef<L.LayerGroup | null>(null);
+  const tollLayerRef = useRef<L.LayerGroup | null>(null);
+  const substationLayerRef = useRef<L.LayerGroup | null>(null);
   const markersRef = useRef<Map<string, L.Marker | L.CircleMarker>>(new Map());
 
   // Derive top 5 hotspots across all points (or use provided hotspots)
@@ -285,6 +295,8 @@ export default function MapView({
 
     corridorLayerRef.current = L.layerGroup().addTo(map);
     hotspotsLayerRef.current = L.layerGroup().addTo(map);
+    tollLayerRef.current = L.layerGroup().addTo(map);
+    substationLayerRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
 
     const resizeObserver = new ResizeObserver(() => {
@@ -304,6 +316,123 @@ export default function MapView({
       mapRef.current = null;
     };
   }, []);
+
+  // Register global window helper for Leaflet HTML popup actions
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      (window as unknown as { __selectToll?: (id: string) => void }).__selectToll = (tollId: string) => {
+        if (onSelectToll) onSelectToll(tollId);
+      };
+    }
+  }, [onSelectToll]);
+
+  // Sync Toll Plazas Layer
+  useEffect(() => {
+    const map = mapRef.current;
+    const tollLayer = tollLayerRef.current;
+    if (!map || !tollLayer) return;
+
+    tollLayer.clearLayers();
+    if (!showTollPlazas) return;
+
+    TOLL_PLAZAS.forEach((toll) => {
+      const tollIcon = L.divIcon({
+        className: "",
+        html: `<div style="width:28px;height:28px;border-radius:6px;background-color:#b45309;color:#ffffff;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,0.35);border:2px solid #ffffff;cursor:pointer;" title="${toll.name}">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.5 2.8C2.1 10.9 2 11.2 2 11.5V16c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg>
+        </div>`,
+        iconSize: [28, 28],
+        iconAnchor: [14, 14],
+      });
+
+      const marker = L.marker([toll.lat, toll.lng], { icon: tollIcon, zIndexOffset: 1500 });
+      marker.bindPopup(`
+        <div style="font-family:'Inter',sans-serif;font-size:12px;color:#0f172a;min-width:230px;">
+          <div style="font-weight:700;font-size:13px;color:#9a3412;margin-bottom:2px;">${toll.name}</div>
+          <div style="font-size:11px;color:#64748b;margin-bottom:6px;">${toll.highwayCode} &middot; ${toll.corridorName} (${toll.state})</div>
+          <div style="background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:6px 8px;margin-bottom:8px;font-size:11px;">
+            <div style="display:flex;justify-content:space-between;margin-bottom:2px;">
+              <span style="color:#78350f;">Daily EV Crossings:</span>
+              <strong style="font-family:monospace;color:#9a3412;">${toll.totalDailyEvs.toLocaleString("en-IN")} EVs</strong>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-bottom:2px;">
+              <span style="color:#78350f;">EV Traffic Share:</span>
+              <strong style="font-family:monospace;color:#0f172a;">${toll.evSharePct}%</strong>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-bottom:2px;">
+              <span style="color:#78350f;">Peak Transit Hour:</span>
+              <strong style="font-family:monospace;color:#dc2626;">${toll.peakHourEvVolume} EVs/h (${toll.peakHourTimeLabel})</strong>
+            </div>
+            <div style="display:flex;justify-content:space-between;">
+              <span style="color:#78350f;">Fast-Charging Need:</span>
+              <strong style="font-family:monospace;color:#047857;">${toll.recommendedTollChargerCapacityMw} MW Hub</strong>
+            </div>
+          </div>
+          <button onclick="window.__selectToll && window.__selectToll('${toll.id}')" style="width:100%;padding:6px 8px;background:#9a3412;color:#ffffff;border:none;border-radius:4px;font-size:11px;font-weight:700;cursor:pointer;text-align:center;">
+            Analyze 24-Hour Toll Flow &rarr;
+          </button>
+        </div>
+      `);
+      marker.bindTooltip(`<strong>${toll.name}</strong><br/>${toll.totalDailyEvs.toLocaleString("en-IN")} EVs/day &middot; Peak ${toll.peakHourEvVolume} EVs/h`, {
+        direction: "top",
+        sticky: true,
+      });
+      marker.addTo(tollLayer);
+    });
+  }, [showTollPlazas, onSelectToll]);
+
+  // Sync Substations Layer
+  useEffect(() => {
+    const map = mapRef.current;
+    const subLayer = substationLayerRef.current;
+    if (!map || !subLayer) return;
+
+    subLayer.clearLayers();
+    if (!showSubstations) return;
+
+    SUBSTATIONS.forEach((sub) => {
+      const isCongested = sub.loadUtilizationPct >= 80;
+      const subIcon = L.divIcon({
+        className: "",
+        html: `<div style="width:26px;height:26px;border-radius:50%;background-color:#4338ca;color:#ffffff;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,0.35);border:2px solid #ffffff;cursor:pointer;" title="${sub.name}">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        </div>`,
+        iconSize: [26, 26],
+        iconAnchor: [13, 13],
+      });
+
+      const marker = L.marker([sub.lat, sub.lng], { icon: subIcon, zIndexOffset: 1400 });
+      marker.bindPopup(`
+        <div style="font-family:'Inter',sans-serif;font-size:12px;color:#0f172a;min-width:240px;">
+          <div style="font-weight:700;font-size:13px;color:#3730a3;margin-bottom:2px;">${sub.name}</div>
+          <div style="font-size:11px;color:#64748b;margin-bottom:6px;">${sub.voltageRating} &middot; Utility: ${sub.discom}</div>
+          <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:6px 8px;margin-bottom:6px;font-size:11px;">
+            <div style="display:flex;justify-content:space-between;margin-bottom:2px;">
+              <span style="color:#475569;">Capacity & Load:</span>
+              <strong style="font-family:monospace;">${sub.currentPeakLoadMva} / ${sub.transformerCapacityMva} MVA (${sub.loadUtilizationPct}%)</strong>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-bottom:2px;">
+              <span style="color:#475569;">Available Headroom:</span>
+              <strong style="font-family:monospace;color:#047857;">+${sub.availableHeadroomMva} MVA</strong>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-bottom:2px;">
+              <span style="color:#475569;">Feeder Feasibility:</span>
+              <strong style="color:${isCongested ? '#dc2626' : '#047857'};font-size:10px;">${sub.feederStatus}</strong>
+            </div>
+            <div style="display:flex;justify-content:space-between;">
+              <span style="color:#475569;">Energization Time:</span>
+              <strong style="font-family:monospace;color:#4338ca;">${sub.energizationLeadTimeDays} Days</strong>
+            </div>
+          </div>
+        </div>
+      `);
+      marker.bindTooltip(`<strong>${sub.name}</strong><br/>${sub.voltageRating} &middot; +${sub.availableHeadroomMva} MVA Headroom`, {
+        direction: "top",
+        sticky: true,
+      });
+      marker.addTo(subLayer);
+    });
+  }, [showSubstations]);
 
   // Sync heatmap overlay representing demand intensity across regions
   useEffect(() => {
