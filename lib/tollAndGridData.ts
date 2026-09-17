@@ -224,8 +224,29 @@ export const TOLL_PLAZAS: TollPlaza[] = [
     recommendedTollChargerCapacityMw: 7.5,
   },
   {
+    id: "toll-panipat-elevated",
+    name: "Panipat Elevated Toll Plaza",
+    highwayCode: "NH44",
+    corridorName: "Delhi – Chandigarh (NH44)",
+    state: "Haryana",
+    lat: 29.3850,
+    lng: 76.9680,
+    totalDailyVehicles: 68400,
+    totalDailyEvs: 4650,
+    evSharePct: 6.8,
+    peakHour: 18,
+    peakHourEvVolume: 440,
+    peakHourTimeLabel: "18:00 - 19:00",
+    offPeakHour: 2,
+    offPeakEvVolume: 42,
+    fastTagLanes: 20,
+    dedicatedEvFastChargeLanes: true,
+    hourlyFlow: generateHourlyFlow(68400, 6.8, 9, 18, true),
+    recommendedTollChargerCapacityMw: 4.5,
+  },
+  {
     id: "toll-gharaunda",
-    name: "Gharaunda Toll Plaza",
+    name: "Gharaunda / Bastara Toll Plaza",
     highwayCode: "NH44",
     corridorName: "Delhi – Chandigarh (NH44)",
     state: "Haryana",
@@ -243,6 +264,48 @@ export const TOLL_PLAZAS: TollPlaza[] = [
     dedicatedEvFastChargeLanes: true,
     hourlyFlow: generateHourlyFlow(51200, 6.6, 8, 18, true),
     recommendedTollChargerCapacityMw: 3.8,
+  },
+  {
+    id: "toll-shambhu",
+    name: "Shambhu Toll Plaza",
+    highwayCode: "NH44",
+    corridorName: "Delhi – Chandigarh (NH44)",
+    state: "Punjab / Haryana Border",
+    lat: 30.4375,
+    lng: 76.7025,
+    totalDailyVehicles: 58400,
+    totalDailyEvs: 3560,
+    evSharePct: 6.1,
+    peakHour: 17,
+    peakHourEvVolume: 345,
+    peakHourTimeLabel: "17:00 - 18:00",
+    offPeakHour: 3,
+    offPeakEvVolume: 30,
+    fastTagLanes: 18,
+    dedicatedEvFastChargeLanes: true,
+    hourlyFlow: generateHourlyFlow(58400, 6.1, 8, 17, true),
+    recommendedTollChargerCapacityMw: 3.6,
+  },
+  {
+    id: "toll-dappar",
+    name: "Dappar Toll Plaza (Zirakpur/Dera Bassi)",
+    highwayCode: "NH152",
+    corridorName: "Delhi – Chandigarh (NH44)",
+    state: "Punjab (Chandigarh Entry)",
+    lat: 30.5528,
+    lng: 76.8220,
+    totalDailyVehicles: 62300,
+    totalDailyEvs: 4610,
+    evSharePct: 7.4,
+    peakHour: 19,
+    peakHourEvVolume: 455,
+    peakHourTimeLabel: "19:00 - 20:00",
+    offPeakHour: 2,
+    offPeakEvVolume: 44,
+    fastTagLanes: 18,
+    dedicatedEvFastChargeLanes: true,
+    hourlyFlow: generateHourlyFlow(62300, 7.4, 9, 19, true),
+    recommendedTollChargerCapacityMw: 4.8,
   },
   {
     id: "toll-charoti",
@@ -638,6 +701,91 @@ export const SUBSTATIONS: SubstationData[] = [
     lat: 28.6315,
     lng: 77.2185,
   },
+  {
+    id: "sub-exp-sonipat",
+    name: "Sonipat Murthal 66/11 kV Grid Substation",
+    discom: "UHBVN (Uttar Haryana Bijli Vitran Nigam)",
+    voltageRating: "66/11 kV",
+    distanceKm: 0.8,
+    transformerCapacityMva: 45.0,
+    currentPeakLoadMva: 32.1,
+    availableHeadroomMva: 12.9,
+    loadUtilizationPct: 71.3,
+    dedicatedEvFeederAvailable: true,
+    feederStatus: "Dedicated 11kV Available",
+    energizationLeadTimeDays: 30,
+    powerCostPerUnitInr: 6.95,
+    lat: 28.9880,
+    lng: 77.0120,
+  },
+  {
+    id: "sub-exp-panipat",
+    name: "Panipat 220/33 kV Transmission Substation",
+    discom: "HVPNL (Haryana Vidyut Prasaran) / UHBVN",
+    voltageRating: "220/33 kV",
+    distanceKm: 1.1,
+    transformerCapacityMva: 100.0,
+    currentPeakLoadMva: 68.5,
+    availableHeadroomMva: 31.5,
+    loadUtilizationPct: 68.5,
+    dedicatedEvFeederAvailable: true,
+    feederStatus: "Dedicated 11kV Available",
+    energizationLeadTimeDays: 30,
+    powerCostPerUnitInr: 6.80,
+    lat: 29.3950,
+    lng: 76.9750,
+  },
+  {
+    id: "sub-exp-karnal",
+    name: "Karnal Bastara 132/33 kV Highway Substation",
+    discom: "HVPNL (Haryana Vidyut Prasaran) / UHBVN",
+    voltageRating: "132/33 kV",
+    distanceKm: 0.8,
+    transformerCapacityMva: 60.0,
+    currentPeakLoadMva: 38.2,
+    availableHeadroomMva: 21.8,
+    loadUtilizationPct: 63.7,
+    dedicatedEvFeederAvailable: true,
+    feederStatus: "Dedicated 11kV Available",
+    energizationLeadTimeDays: 28,
+    powerCostPerUnitInr: 6.85,
+    lat: 29.5480,
+    lng: 76.9800,
+  },
+  {
+    id: "sub-exp-ambala",
+    name: "Ambala Cantt 66/33/11 kV Grid Substation",
+    discom: "UHBVN (Uttar Haryana Bijli Vitran Nigam)",
+    voltageRating: "66/33/11 kV",
+    distanceKm: 1.0,
+    transformerCapacityMva: 50.0,
+    currentPeakLoadMva: 36.4,
+    availableHeadroomMva: 13.6,
+    loadUtilizationPct: 72.8,
+    dedicatedEvFeederAvailable: true,
+    feederStatus: "Dedicated 11kV Available",
+    energizationLeadTimeDays: 35,
+    powerCostPerUnitInr: 6.90,
+    lat: 30.3750,
+    lng: 76.7720,
+  },
+  {
+    id: "sub-exp-zirakpur",
+    name: "Zirakpur / Dera Bassi 66/11 kV Substation",
+    discom: "PSPCL (Punjab State Power Corp Ltd)",
+    voltageRating: "66/11 kV",
+    distanceKm: 0.9,
+    transformerCapacityMva: 40.0,
+    currentPeakLoadMva: 31.8,
+    availableHeadroomMva: 8.2,
+    loadUtilizationPct: 79.5,
+    dedicatedEvFeederAvailable: true,
+    feederStatus: "Shared Feeder - High Capacity",
+    energizationLeadTimeDays: 42,
+    powerCostPerUnitInr: 7.10,
+    lat: 30.5890,
+    lng: 76.8350,
+  },
 ];
 
 // Helper to assign or locate the most relevant Substation for any DataPoint
@@ -701,28 +849,31 @@ export function getChargerUtilizationsForPoint(point: DataPoint): ChargerTypeUti
 
 // Helper to find nearest toll plaza for a location or corridor
 export function getNearestTollPlaza(point: DataPoint): TollPlaza | null {
-  if (!point.isCorridor && point.category !== "highway") {
-    // Check if any toll is within 35 km
-    for (const toll of TOLL_PLAZAS) {
-      const dLat = (toll.lat - point.lat) * 111;
-      const dLng = (toll.lng - point.lng) * 111 * Math.cos((point.lat * Math.PI) / 180);
-      const dist = Math.sqrt(dLat * dLat + dLng * dLng);
-      if (dist <= 35) return toll;
+  // If point belongs to a corridor, find the closest toll on that corridor
+  if (point.corridorName) {
+    const corridorTolls = TOLL_PLAZAS.filter(
+      (t) =>
+        t.corridorName.toLowerCase().includes(point.corridorName!.toLowerCase()) ||
+        point.corridorName!.toLowerCase().includes(t.corridorName.toLowerCase())
+    );
+    if (corridorTolls.length > 0) {
+      let closest = corridorTolls[0];
+      let minDist = 999999;
+      for (const toll of corridorTolls) {
+        const dLat = (toll.lat - point.lat) * 111;
+        const dLng = (toll.lng - point.lng) * 111 * Math.cos((point.lat * Math.PI) / 180);
+        const dist = Math.sqrt(dLat * dLat + dLng * dLng);
+        if (dist < minDist) {
+          minDist = dist;
+          closest = toll;
+        }
+      }
+      return closest;
     }
-    return null;
   }
 
-  // For corridor/highway points: find matching corridor or closest toll
-  const match = TOLL_PLAZAS.find(
-    (t) =>
-      point.corridorName &&
-      (t.corridorName.toLowerCase().includes(point.corridorName.toLowerCase()) ||
-        point.corridorName.toLowerCase().includes(t.highwayCode.toLowerCase()))
-  );
-  if (match) return match;
-
-  // Otherwise return closest by lat/lng
-  let closest = TOLL_PLAZAS[0];
+  // Otherwise find closest by geographic distance
+  let closest: TollPlaza = TOLL_PLAZAS[0];
   let minDist = 999999;
   for (const toll of TOLL_PLAZAS) {
     const dLat = (toll.lat - point.lat) * 111;
@@ -733,5 +884,9 @@ export function getNearestTollPlaza(point: DataPoint): TollPlaza | null {
       closest = toll;
     }
   }
-  return closest;
+
+  if (point.isCorridor || point.category === "highway") {
+    return closest;
+  }
+  return minDist <= 40 ? closest : null;
 }

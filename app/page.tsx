@@ -24,6 +24,7 @@ import {
   TrendingUp,
   X,
   Zap,
+  Route,
 } from "lucide-react";
 import RoleSwitcher from "@/components/RoleSwitcher";
 import KpiPanel from "@/components/KpiPanel";
@@ -54,6 +55,7 @@ import {
   cityShortfalls,
   categoryGapBreakdown,
   getTopDemandHotspots,
+  CORRIDORS,
 } from "@/lib/data";
 import { ChargerRecommendation, DataPoint, EvDensity, Role, StateAggregate } from "@/lib/types";
 import { MetricKey } from "@/components/MapView";
@@ -274,6 +276,8 @@ export default function Home() {
   // Operational overlay layers & toll state
   const [showTollPlazas, setShowTollPlazas] = useState<boolean>(false);
   const [showSubstations, setShowSubstations] = useState<boolean>(false);
+  const [showCorridors, setShowCorridors] = useState<boolean>(true);
+  const [selectedCorridorId, setSelectedCorridorId] = useState<string | null>(null);
   const [selectedTollId, setSelectedTollId] = useState<string>("toll-kherki-daula");
   const [showDataProvenanceModal, setShowDataProvenanceModal] = useState<boolean>(false);
 
@@ -734,6 +738,9 @@ export default function Home() {
             hotspotPoints={topHotspots}
             showTollPlazas={showTollPlazas}
             showSubstations={showSubstations}
+            showCorridors={showCorridors}
+            selectedCorridorId={selectedCorridorId}
+            onSelectCorridor={setSelectedCorridorId}
             onSelectToll={(tollId) => {
               setSelectedTollId(tollId);
               const el = document.getElementById("toll-flow-analytics-section");
@@ -861,6 +868,50 @@ export default function Home() {
 
             <div className="h-4 w-px bg-line/80 mx-0.5" />
 
+            {/* National Corridors Layer Toggle & Quick Focus */}
+            <button
+              id="map-corridors-toggle-btn"
+              type="button"
+              onClick={() => setShowCorridors((prev) => !prev)}
+              className={`text-[11px] px-2.5 py-1.5 rounded flex items-center gap-1.5 transition-all ${
+                showCorridors
+                  ? "bg-amber-100 text-amber-950 border border-amber-400 font-bold shadow-xs"
+                  : "text-muted hover:text-ink hover:bg-panel border border-transparent"
+              }`}
+              title="Toggle high-priority national EV charging corridors with high-visibility expressway ribbons"
+            >
+              <Route className={`h-3.5 w-3.5 ${showCorridors ? "text-amber-800" : "text-slate-500"}`} />
+              <span>Corridors</span>
+              <span
+                className={`inline-flex items-center justify-center px-1.5 py-0.2 rounded-full text-[9px] font-bold ${
+                  showCorridors
+                    ? "bg-amber-800 text-white"
+                    : "bg-panel border border-line text-muted"
+                }`}
+              >
+                {CORRIDORS.length}
+              </span>
+            </button>
+
+            {showCorridors && (
+              <select
+                id="quick-corridor-selector"
+                value={selectedCorridorId || ""}
+                onChange={(e) => setSelectedCorridorId(e.target.value ? e.target.value : null)}
+                className="text-[11px] font-semibold bg-white border border-slate-300 rounded px-2 py-1 text-slate-800 focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer shadow-2xs max-w-[150px] truncate"
+                title="Focus on an expressway corridor ribbon"
+              >
+                <option value="">All Corridors ({CORRIDORS.length})</option>
+                {CORRIDORS.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.highwayCode}: {c.name}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            <div className="h-4 w-px bg-line/80 mx-0.5" />
+
             <button
               id="map-compare-mode-btn"
               type="button"
@@ -918,7 +969,12 @@ export default function Home() {
             </div>
           )}
 
-          <MapLegend metric={metric} showHeatmap={showHeatmap} showHotspots={showHotspots} />
+          <MapLegend
+            metric={metric}
+            showHeatmap={showHeatmap}
+            showHotspots={showHotspots}
+            showCorridors={showCorridors}
+          />
         </div>
 
         {/* Right Table & Detail Panel - strictly 50% width to match left map panel */}
@@ -1332,7 +1388,11 @@ export default function Home() {
                   </div>
                 </div>
                 <p className={SUBTEXT_CLASS}>Corridor stops evaluated against 50km MoP guideline · Click bar to inspect stop</p>
-                <CorridorGapChart points={flRows} onSelectPoint={setSelectedPoint} />
+                <CorridorGapChart
+                  points={flRows}
+                  onSelectPoint={setSelectedPoint}
+                  onSelectCorridor={setSelectedCorridorId}
+                />
               </>
             )}
           </div>

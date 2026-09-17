@@ -152,16 +152,28 @@ const HUBS: Hub[] = [
   },
 ];
 
-interface Corridor {
+export interface Corridor {
+  id: string;
   name: string;
+  highwayCode: string;
   state: string;
+  color: string;
+  lengthKm: number;
+  evCorridorReadinessPct: number;
+  priorityStatus: "critical" | "high" | "moderate";
   waypoints: { name: string; lat: number; lng: number }[];
 }
 
-const CORRIDORS: Corridor[] = [
+export const CORRIDORS: Corridor[] = [
   {
+    id: "delhi-jaipur-nh48",
     name: "Delhi – Jaipur (NH48)",
+    highwayCode: "NH-48",
     state: "Rajasthan",
+    color: "#EA580C",
+    lengthKm: 280,
+    evCorridorReadinessPct: 85,
+    priorityStatus: "critical",
     waypoints: [
       { name: "Gurugram Toll Plaza", lat: 28.4211, lng: 76.9877 },
       { name: "Kotputli Junction", lat: 27.7, lng: 76.2 },
@@ -170,8 +182,14 @@ const CORRIDORS: Corridor[] = [
     ],
   },
   {
+    id: "mumbai-pune-expressway",
     name: "Mumbai – Pune Expressway",
+    highwayCode: "MPEW / NE-1",
     state: "Maharashtra",
+    color: "#2563EB",
+    lengthKm: 94,
+    evCorridorReadinessPct: 92,
+    priorityStatus: "high",
     waypoints: [
       { name: "Panvel Junction", lat: 18.99, lng: 73.12 },
       { name: "Lonavala Ghat Section", lat: 18.75, lng: 73.4 },
@@ -180,8 +198,14 @@ const CORRIDORS: Corridor[] = [
     ],
   },
   {
+    id: "bengaluru-chennai-nh48",
     name: "Bengaluru – Chennai (NH48/NH716)",
+    highwayCode: "NH-48",
     state: "Tamil Nadu",
+    color: "#059669",
+    lengthKm: 340,
+    evCorridorReadinessPct: 78,
+    priorityStatus: "critical",
     waypoints: [
       { name: "Hosur Junction", lat: 12.74, lng: 77.83 },
       { name: "Krishnagiri Bypass", lat: 12.52, lng: 78.21 },
@@ -190,8 +214,14 @@ const CORRIDORS: Corridor[] = [
     ],
   },
   {
+    id: "delhi-chandigarh-nh44",
     name: "Delhi – Chandigarh (NH44)",
+    highwayCode: "NH-44",
     state: "Haryana",
+    color: "#0284C7",
+    lengthKm: 245,
+    evCorridorReadinessPct: 88,
+    priorityStatus: "high",
     waypoints: [
       { name: "Sonipat", lat: 28.99, lng: 77.01 },
       { name: "Panipat", lat: 29.39, lng: 76.97 },
@@ -202,8 +232,14 @@ const CORRIDORS: Corridor[] = [
     ],
   },
   {
+    id: "mumbai-ahmedabad-nh48",
     name: "Mumbai – Ahmedabad (NH48)",
+    highwayCode: "NH-48",
     state: "Gujarat",
+    color: "#7C3AED",
+    lengthKm: 530,
+    evCorridorReadinessPct: 74,
+    priorityStatus: "critical",
     waypoints: [
       { name: "Bhiwandi Bypass", lat: 19.3, lng: 73.06 },
       { name: "Vapi", lat: 20.37, lng: 72.91 },
@@ -214,8 +250,14 @@ const CORRIDORS: Corridor[] = [
     ],
   },
   {
+    id: "kolkata-bhubaneswar-nh16",
     name: "Kolkata – Bhubaneswar (NH16)",
+    highwayCode: "NH-16",
     state: "Odisha",
+    color: "#D97706",
+    lengthKm: 440,
+    evCorridorReadinessPct: 62,
+    priorityStatus: "moderate",
     waypoints: [
       { name: "Kharagpur", lat: 22.35, lng: 87.23 },
       { name: "Balasore", lat: 21.49, lng: 86.93 },
@@ -225,8 +267,14 @@ const CORRIDORS: Corridor[] = [
     ],
   },
   {
+    id: "hyderabad-bengaluru-nh44",
     name: "Hyderabad – Bengaluru (NH44)",
+    highwayCode: "NH-44",
     state: "Karnataka",
+    color: "#E11D48",
+    lengthKm: 570,
+    evCorridorReadinessPct: 69,
+    priorityStatus: "critical",
     waypoints: [
       { name: "Jadcherla", lat: 16.76, lng: 78.16 },
       { name: "Shadnagar", lat: 17.06, lng: 78.19 },
@@ -237,8 +285,14 @@ const CORRIDORS: Corridor[] = [
     ],
   },
   {
+    id: "chennai-coimbatore-nh544",
     name: "Chennai – Coimbatore (NH544)",
+    highwayCode: "NH-544",
     state: "Tamil Nadu",
+    color: "#0D9488",
+    lengthKm: 510,
+    evCorridorReadinessPct: 72,
+    priorityStatus: "high",
     waypoints: [
       { name: "Sriperumbudur", lat: 12.97, lng: 79.94 },
       { name: "Kanchipuram", lat: 12.84, lng: 79.7 },

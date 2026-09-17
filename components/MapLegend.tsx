@@ -11,6 +11,7 @@ interface MapLegendProps {
   showHeatmap?: boolean;
   showHotspots?: boolean;
   futureLoadPct?: number;
+  showCorridors?: boolean;
 }
 
 export default function MapLegend({
@@ -18,6 +19,7 @@ export default function MapLegend({
   showHeatmap = false,
   showHotspots = false,
   futureLoadPct = 0,
+  showCorridors = true,
 }: MapLegendProps) {
   return (
     <div className="absolute bottom-4 left-4 bg-panel/90 backdrop-blur border border-line rounded-md px-3 py-2.5 z-[500] shadow-sm space-y-2.5">
@@ -70,6 +72,20 @@ export default function MapLegend({
             <span>Top 5 Demand Hotspots</span>
           </div>
           <p className="text-[10px] text-muted">Pinned permanently across all filters</p>
+        </div>
+      )}
+
+      {showCorridors && (
+        <div className="pb-2 border-b border-line/60">
+          <div className="text-[11px] font-semibold text-amber-800 mb-1 flex items-center gap-2">
+            <div className="flex items-center">
+              <span className="h-2 w-5 rounded-full bg-slate-900 flex items-center justify-center px-0.5">
+                <span className="h-1 w-4 rounded-full bg-amber-500" />
+              </span>
+            </div>
+            <span>National Corridors (8)</span>
+          </div>
+          <p className="text-[10px] text-muted">High-visibility expressway ribbons &amp; hubs</p>
         </div>
       )}
 

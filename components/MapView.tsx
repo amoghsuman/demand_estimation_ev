@@ -12,10 +12,10 @@ if (typeof window !== "undefined") {
   (window as unknown as { L: typeof L }).L = L;
 }
 import "leaflet.heat";
-import { Flame } from "lucide-react";
+import { Flame, Route, X, ChevronRight, Navigation } from "lucide-react";
 
 import { DataPoint, TollPlaza, SubstationData } from "@/lib/types";
-import { formatShortfall, getTopDemandHotspots } from "@/lib/data";
+import { formatShortfall, getTopDemandHotspots, CORRIDORS, Corridor } from "@/lib/data";
 import { TOLL_PLAZAS, SUBSTATIONS } from "@/lib/tollAndGridData";
 
 export type MetricKey = "gapScore" | "demandScore" | "existingChargers";
@@ -48,6 +48,10 @@ interface Props {
   showTollPlazas?: boolean;
   showSubstations?: boolean;
   onSelectToll?: (tollId: string) => void;
+  // High-visibility corridor routing overlay and selection
+  showCorridors?: boolean;
+  selectedCorridorId?: string | null;
+  onSelectCorridor?: (corridorId: string | null) => void;
 }
 
 const METRIC_MAX: Record<MetricKey, number> = {
@@ -236,16 +240,25 @@ export default function MapView({
   showTollPlazas = false,
   showSubstations = false,
   onSelectToll,
+  showCorridors = true,
+  selectedCorridorId = null,
+  onSelectCorridor,
 }: Props) {
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const clusterGroupRef = useRef<L.MarkerClusterGroup | null>(null);
+  const corridorRoutesLayerRef = useRef<L.LayerGroup | null>(null);
   const corridorLayerRef = useRef<L.LayerGroup | null>(null);
   const heatLayerRef = useRef<L.HeatLayer | null>(null);
   const hotspotsLayerRef = useRef<L.LayerGroup | null>(null);
   const tollLayerRef = useRef<L.LayerGroup | null>(null);
   const substationLayerRef = useRef<L.LayerGroup | null>(null);
   const markersRef = useRef<Map<string, L.Marker | L.CircleMarker>>(new Map());
+
+  const selectedCorridor = useMemo(() => {
+    if (!selectedCorridorId) return null;
+    return CORRIDORS.find((c) => c.id === selectedCorridorId) || null;
+  }, [selectedCorridorId]);
 
   // Derive top 5 hotspots across all points (or use provided hotspots)
   const topHotspots = useMemo(() => {
@@ -291,12 +304,14 @@ export default function MapView({
         });
       },
     });
-    map.addLayer(clusterGroupRef.current);
 
+    // Base highway ribbons sit under hub markers
+    corridorRoutesLayerRef.current = L.layerGroup().addTo(map);
     corridorLayerRef.current = L.layerGroup().addTo(map);
-    hotspotsLayerRef.current = L.layerGroup().addTo(map);
+    map.addLayer(clusterGroupRef.current);
     tollLayerRef.current = L.layerGroup().addTo(map);
     substationLayerRef.current = L.layerGroup().addTo(map);
+    hotspotsLayerRef.current = L.layerGroup().addTo(map);
     mapRef.current = map;
 
     const resizeObserver = new ResizeObserver(() => {
@@ -317,14 +332,167 @@ export default function MapView({
     };
   }, []);
 
-  // Register global window helper for Leaflet HTML popup actions
+  // Register global window helpers for Leaflet HTML popup actions
   useEffect(() => {
     if (typeof window !== "undefined") {
       (window as unknown as { __selectToll?: (id: string) => void }).__selectToll = (tollId: string) => {
         if (onSelectToll) onSelectToll(tollId);
       };
+      (window as unknown as { __focusCorridor?: (id: string) => void }).__focusCorridor = (corridorId: string) => {
+        if (onSelectCorridor) onSelectCorridor(corridorId);
+        const corridor = CORRIDORS.find((c) => c.id === corridorId);
+        if (corridor && mapRef.current) {
+          const latlngs = corridor.waypoints.map((w) => [w.lat, w.lng] as [number, number]);
+          mapRef.current.fitBounds(L.latLngBounds(latlngs), { padding: [60, 60], maxZoom: 11 });
+        }
+      };
     }
-  }, [onSelectToll]);
+  }, [onSelectToll, onSelectCorridor]);
+
+  // Sync High-Visibility National Corridors Overlay (Dual-cased ribbons with highway shields)
+  useEffect(() => {
+    const map = mapRef.current;
+    const layer = corridorRoutesLayerRef.current;
+    if (!map || !layer) return;
+
+    layer.clearLayers();
+    if (!showCorridors) return;
+
+    CORRIDORS.forEach((corridor) => {
+      const isSelected = selectedCorridorId === corridor.id;
+      const latlngs = corridor.waypoints.map((wp) => [wp.lat, wp.lng] as [number, number]);
+      if (latlngs.length < 2) return;
+
+      // 1. Ambient Glow Aura for visual prominence
+      const glowWeight = isSelected ? 18 : emphasizeCorridor ? 14 : 11;
+      const glowOpacity = isSelected ? 0.55 : emphasizeCorridor ? 0.38 : 0.22;
+      const glowLine = L.polyline(latlngs, {
+        color: corridor.color,
+        weight: glowWeight,
+        opacity: glowOpacity,
+        lineCap: "round",
+        lineJoin: "round",
+        interactive: false,
+      });
+      glowLine.addTo(layer);
+
+      // 2. High-Contrast Base Casing (Dark Slate for sharp optical edge separation against terrain)
+      const casingWeight = isSelected ? 10 : emphasizeCorridor ? 8.5 : 7;
+      const casingLine = L.polyline(latlngs, {
+        color: "#0f172a",
+        weight: casingWeight,
+        opacity: 0.94,
+        lineCap: "round",
+        lineJoin: "round",
+        interactive: false,
+      });
+      casingLine.addTo(layer);
+
+      // 3. Vibrant Core Highway Ribbon (Solid, High Visibility)
+      const coreWeight = isSelected ? 6 : emphasizeCorridor ? 5 : 4;
+      const coreLine = L.polyline(latlngs, {
+        color: corridor.color,
+        weight: coreWeight,
+        opacity: 1.0,
+        lineCap: "round",
+        lineJoin: "round",
+        interactive: true,
+      });
+
+      // Interactive hover states
+      coreLine.on("mouseover", () => {
+        coreLine.setStyle({ weight: coreWeight + 2 });
+        casingLine.setStyle({ weight: casingWeight + 3 });
+        glowLine.setStyle({ opacity: 0.65, weight: glowWeight + 4 });
+      });
+
+      coreLine.on("mouseout", () => {
+        coreLine.setStyle({ weight: coreWeight });
+        casingLine.setStyle({ weight: casingWeight });
+        glowLine.setStyle({ opacity: glowOpacity, weight: glowWeight });
+      });
+
+      coreLine.on("click", (e) => {
+        L.DomEvent.stopPropagation(e);
+        if (onSelectCorridor) onSelectCorridor(corridor.id);
+        map.fitBounds(L.latLngBounds(latlngs), { padding: [60, 60], maxZoom: 11 });
+      });
+
+      // Rich Tooltip along the line
+      coreLine.bindTooltip(`
+        <div style="font-family:'Inter',sans-serif;font-size:12px;color:#0f172a;min-width:210px;">
+          <div style="display:flex;align-items:center;gap:6px;font-weight:700;">
+            <span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${corridor.color};box-shadow:0 0 6px ${corridor.color};"></span>
+            <span>${corridor.name}</span>
+            <span style="background:#0f172a;color:#ffffff;font-size:10px;font-weight:800;padding:1px 6px;border-radius:4px;margin-left:auto;">${corridor.highwayCode}</span>
+          </div>
+          <div style="font-size:11px;font-weight:500;color:#64748b;margin-top:3px;">
+            ${corridor.lengthKm} km &middot; ${corridor.waypoints.length} High-Capacity Charging Hubs &middot; ${corridor.evCorridorReadinessPct}% Readiness
+          </div>
+          <div style="font-size:10px;color:${corridor.color};font-weight:700;margin-top:3px;">
+            Click line to zoom &amp; inspect corridor &rarr;
+          </div>
+        </div>
+      `, { sticky: true, opacity: 0.98 });
+
+      // Detailed Leaflet Popup on the line
+      coreLine.bindPopup(`
+        <div style="font-family:'Inter',sans-serif;min-width:260px;color:#0f172a;">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+            <span style="background:${corridor.color};color:#ffffff;font-size:10px;font-weight:800;padding:2px 6px;border-radius:4px;">${corridor.highwayCode}</span>
+            <span style="font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;">${corridor.priorityStatus} Priority</span>
+          </div>
+          <div style="font-family:'Newsreader',serif;font-size:16px;font-weight:700;color:#0f172a;margin-bottom:2px;">${corridor.name}</div>
+          <div style="font-size:11px;color:#64748b;margin-bottom:8px;">${corridor.state} &middot; Length: ~${corridor.lengthKm} km</div>
+          
+          <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:6px 8px;font-size:11px;margin-bottom:8px;">
+            <div style="display:flex;justify-content:space-between;margin-bottom:2px;">
+              <span style="color:#64748b;">EV Corridor Readiness:</span>
+              <strong style="color:${corridor.color};font-size:12px;">${corridor.evCorridorReadinessPct}%</strong>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+              <span style="color:#64748b;">Fast Hubs:</span>
+              <strong>${corridor.waypoints.length} Hubs</strong>
+            </div>
+            <div style="margin-top:4px;padding-top:4px;border-top:1px dashed #cbd5e1;color:#334155;font-size:10px;">
+              <strong>Key Hubs:</strong> ${corridor.waypoints.map(w => w.name).join(' &rarr; ')}
+            </div>
+          </div>
+
+          <button onclick="window.__focusCorridor && window.__focusCorridor('${corridor.id}')" style="width:100%;padding:6px 8px;background:${corridor.color};color:#ffffff;border:none;border-radius:4px;font-size:11px;font-weight:700;cursor:pointer;box-shadow:0 2px 4px rgba(0,0,0,0.2);">
+            Focus on Corridor Route &rarr;
+          </button>
+        </div>
+      `);
+
+      coreLine.addTo(layer);
+
+      // 4. Highway Shield Marker at Midpoint
+      const midIdx = Math.floor(corridor.waypoints.length / 2);
+      const midPoint = corridor.waypoints[midIdx] || corridor.waypoints[0];
+      const shieldIcon = L.divIcon({
+        className: "",
+        html: `<div style="background:#0f172a;border:2px solid ${corridor.color};border-radius:12px;color:#ffffff;font-family:'Inter',sans-serif;font-size:10px;font-weight:800;padding:2px 7px;box-shadow:0 3px 8px rgba(0,0,0,0.5);display:inline-flex;align-items:center;gap:4px;cursor:pointer;white-space:nowrap;transform:translate(-50%, -50%);" title="${corridor.name} (${corridor.highwayCode})">
+          <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${corridor.color};box-shadow:0 0 6px ${corridor.color};"></span>
+          <span>${corridor.highwayCode}</span>
+        </div>`,
+        iconSize: [60, 22],
+        iconAnchor: [30, 11],
+      });
+
+      const shieldMarker = L.marker([midPoint.lat, midPoint.lng], { icon: shieldIcon, zIndexOffset: 1200 });
+      shieldMarker.on("click", (e) => {
+        L.DomEvent.stopPropagation(e);
+        if (onSelectCorridor) onSelectCorridor(corridor.id);
+        map.fitBounds(L.latLngBounds(latlngs), { padding: [60, 60], maxZoom: 11 });
+      });
+      shieldMarker.bindTooltip(`<strong>${corridor.name}</strong><br/>${corridor.lengthKm} km &middot; ${corridor.evCorridorReadinessPct}% Readiness`, {
+        direction: "top",
+        sticky: true,
+      });
+      shieldMarker.addTo(layer);
+    });
+  }, [showCorridors, selectedCorridorId, emphasizeCorridor, onSelectCorridor]);
 
   // Sync Toll Plazas Layer
   useEffect(() => {
@@ -495,25 +663,6 @@ export default function MapView({
 
     const max = METRIC_MAX[metric];
 
-    // Draw each corridor's route as a thin connecting line, in stop order,
-    // before its markers so the markers sit on top.
-    const corridorGroups = new Map<string, DataPoint[]>();
-    points.forEach((p) => {
-      if (p.isCorridor && p.corridorName) {
-        const group = corridorGroups.get(p.corridorName) ?? [];
-        group.push(p);
-        corridorGroups.set(p.corridorName, group);
-      }
-    });
-    corridorGroups.forEach((stops) => {
-      const latlngs = stops.map((p) => [p.lat, p.lng] as [number, number]);
-      L.polyline(latlngs, {
-        color: "rgba(27,29,34,0.4)",
-        weight: 2,
-        dashArray: "5 5",
-      }).addTo(corridorLayer);
-    });
-
     const renderedHotspotIds = new Set<string>();
 
     points.forEach((p) => {
@@ -552,27 +701,32 @@ export default function MapView({
       let fillOpacity = 0.85;
       if (emphasizeCorridor !== undefined) {
         const relevant = emphasizeCorridor ? p.isCorridor : !p.isCorridor;
-        fillOpacity = relevant ? 0.9 : 0.22;
+        fillOpacity = relevant ? 0.95 : 0.22;
       }
       if (showHeatmap) {
         fillOpacity = Math.min(fillOpacity, 0.65);
       }
 
       if (p.isCorridor) {
-        const radius = compareBadge ? 11 : 7;
+        // Find matching corridor for theme color and active selection
+        const matchingCorridor = CORRIDORS.find((c) => c.name === p.corridorName);
+        const hubColor = matchingCorridor ? matchingCorridor.color : "#EA580C";
+        const isCorridorActive = selectedCorridorId && matchingCorridor?.id === selectedCorridorId;
+        const radius = compareBadge ? 12 : isCorridorActive ? 9.5 : 8;
+
         const circle = L.circleMarker([p.lat, p.lng], {
           radius,
-          color: isA ? "#D97706" : isB ? "#0284C7" : "rgba(27,29,34,0.35)",
-          weight: compareBadge ? 3.5 : 1,
-          fillColor: color,
-          fillOpacity: compareBadge ? 1 : fillOpacity,
+          color: isA ? "#D97706" : isB ? "#0284C7" : isCorridorActive ? "#0f172a" : "#FFFFFF",
+          weight: compareBadge ? 3.5 : isCorridorActive ? 3 : 2.5,
+          fillColor: hubColor,
+          fillOpacity: 1,
           className: `point-marker ${compareBadge ? "ring-2 ring-offset-2" : ""}`,
         });
         circle.bindPopup(popupHtml(p, undefined, futureLoadPct));
         circle.bindTooltip(
           `${tooltipHtml(p, undefined, futureLoadPct)}${
             isA ? " &middot; <strong>[Location A]</strong>" : isB ? " &middot; <strong>[Location B]</strong>" : ""
-          }`,
+          }${matchingCorridor ? ` &middot; <span style="color:${hubColor};font-weight:700;">[${matchingCorridor.highwayCode}]</span>` : ""}`,
           { direction: "top", sticky: true, opacity: 0.95 }
         );
         circle.on("click", handleMarkerClick);
@@ -642,6 +796,7 @@ export default function MapView({
     topHotspots,
     hotspotRankMap,
     futureLoadPct,
+    selectedCorridorId,
   ]);
 
   // Handle click on "Set as A" or "Set as B" buttons inside map popups
@@ -742,6 +897,76 @@ export default function MapView({
                 </span>
               </button>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Floating Active Corridor Inspector HUD */}
+      {selectedCorridor && (
+        <div
+          className={`absolute ${
+            isCompareMode ? "top-32" : showHotspots ? "top-36" : "top-16"
+          } left-4 z-[500] bg-panel/95 backdrop-blur border-2 shadow-2xl rounded-xl p-3.5 max-w-sm animate-in fade-in slide-in-from-top-2 duration-150`}
+          style={{ borderColor: selectedCorridor.color }}
+        >
+          <div className="flex items-center justify-between gap-3 mb-1.5 pb-1.5 border-b border-line">
+            <div className="flex items-center gap-2">
+              <span
+                className="h-3 w-3 rounded-full shrink-0 shadow-xs"
+                style={{ backgroundColor: selectedCorridor.color }}
+              />
+              <span className="text-xs font-bold text-ink leading-tight">{selectedCorridor.name}</span>
+              <span className="text-[10px] font-extrabold px-1.5 py-0.2 rounded bg-slate-900 text-white shadow-2xs">
+                {selectedCorridor.highwayCode}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => onSelectCorridor && onSelectCorridor(null)}
+              className="text-muted hover:text-ink text-xs p-1 rounded-md hover:bg-slate-200 transition-colors cursor-pointer"
+              title="Close corridor inspector"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="text-[11px] text-slate-600 flex items-center justify-between gap-2 mb-2 bg-slate-50 p-2 rounded-lg border border-slate-200">
+            <div>
+              <span className="text-[10px] text-slate-400 uppercase font-semibold block">Length</span>
+              <strong className="text-slate-900">{selectedCorridor.lengthKm} km</strong>
+            </div>
+            <div>
+              <span className="text-[10px] text-slate-400 uppercase font-semibold block">Fast Hubs</span>
+              <strong className="text-slate-900">{selectedCorridor.waypoints.length} Hubs</strong>
+            </div>
+            <div>
+              <span className="text-[10px] text-slate-400 uppercase font-semibold block">EV Readiness</span>
+              <strong style={{ color: selectedCorridor.color }}>{selectedCorridor.evCorridorReadinessPct}%</strong>
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+              Charging Hubs Along Corridor:
+            </span>
+            <div className="flex flex-wrap gap-1">
+              {selectedCorridor.waypoints.map((wp, i) => (
+                <button
+                  key={wp.name}
+                  type="button"
+                  onClick={() => {
+                    if (mapRef.current) {
+                      mapRef.current.flyTo([wp.lat, wp.lng], 10, { duration: 0.6 });
+                    }
+                  }}
+                  className="px-2 py-0.5 rounded bg-white hover:bg-slate-100 text-[10px] font-medium border border-slate-300 text-slate-800 hover:text-amber-700 transition-colors cursor-pointer shadow-2xs"
+                  title={`Fly to ${wp.name}`}
+                >
+                  <span className="font-bold text-slate-400 mr-1">{i + 1}.</span>
+                  {wp.name}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       )}

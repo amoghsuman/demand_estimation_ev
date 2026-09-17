@@ -12,6 +12,7 @@ import {
   ReferenceLine,
 } from "recharts";
 import { DataPoint } from "@/lib/types";
+import { CORRIDORS } from "@/lib/data";
 import {
   CHART_MUTED,
   CHART_INK,
@@ -24,9 +25,14 @@ function cleanStopName(name: string) {
 interface CorridorGapChartProps {
   points: DataPoint[];
   onSelectPoint?: (point: DataPoint) => void;
+  onSelectCorridor?: (corridorId: string | null) => void;
 }
 
-export default function CorridorGapChart({ points, onSelectPoint }: CorridorGapChartProps) {
+export default function CorridorGapChart({
+  points,
+  onSelectPoint,
+  onSelectCorridor,
+}: CorridorGapChartProps) {
   const [selectedCorridor, setSelectedCorridor] = useState<string>("all");
   const [hoveredId, setHoveredId] = useState<string | null>(null);
 
@@ -79,7 +85,18 @@ export default function CorridorGapChart({ points, onSelectPoint }: CorridorGapC
           <span className="font-bold text-slate-900">Corridor:</span>
           <select
             value={selectedCorridor}
-            onChange={(e) => setSelectedCorridor(e.target.value)}
+            onChange={(e) => {
+              const val = e.target.value;
+              setSelectedCorridor(val);
+              if (onSelectCorridor) {
+                if (val === "all") {
+                  onSelectCorridor(null);
+                } else {
+                  const match = CORRIDORS.find((c) => c.name === val);
+                  onSelectCorridor(match ? match.id : null);
+                }
+              }
+            }}
             className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-bold text-slate-950 focus:outline-none focus:ring-1 focus:ring-copper shadow-2xs cursor-pointer"
           >
             <option value="all">All highway corridors ({points.length} stops)</option>
