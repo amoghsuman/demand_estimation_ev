@@ -143,3 +143,32 @@ sum from, so these two fields stay flagged as illustrative only.
 Swapping in real data means replacing the generation functions in
 `lib/data.ts` with real feeds while keeping the same `DataPoint` /
 `StateAggregate` shapes. The dashboard and charts don't need to change.
+
+## 8. Corridor chainage model (Delhi to Chandigarh, NH44)
+
+`lib/corridorChainage.ts` links toll flow, charging stops, charger
+availability and white spaces in one deterministic chain. All values are
+dummy.
+
+- **Stations sit at kilometre markers.** Nine dummy stations from km 8 to
+  km 236. Spacing is deliberate: 16 to 18 km gaps (green), 22 and 24 km gaps
+  around Samalkha (amber), an 80 km hole Karnal to Ambala and a 33 km hole
+  Ambala to Zirakpur (red).
+- **Colour rule, by spacing between consecutive chargers.** Over 30 km is
+  red (white space). 20 to 30 km is amber. Under 20 km is green, and turns
+  amber in any hour when every gun at both ends is busy (utilization at or
+  above 90%).
+- **Toll flow.** Each plaza's 24 hourly bars are renormalised so they sum to
+  the stated daily EV count; peak and off-peak headline values are read from
+  the curve. Flow at a station is a distance-weighted blend of the two tolls
+  that bracket it.
+- **Stop rate.** Share of passing EVs that pull in at an average station:
+  4W 1.7%, fleet and light commercial 3.4%, buses and trucks 4.5%, scaled by
+  a site attraction factor and by the spacing around the site (long gaps push
+  more drivers to stop).
+- **Service.** Sessions per gun per hour = 60 / session minutes (48 min at
+  60 kW, 32 min at 120 kW) x uptime. Arrivals beyond capacity queue for up
+  to half an hour of throughput; the rest are turned away.
+- **Requirement.** Guns needed to serve peak hour arrivals at a 75% target
+  utilization. Toll level current vs required MW sums the stations inside a
+  15 km catchment of the plaza.

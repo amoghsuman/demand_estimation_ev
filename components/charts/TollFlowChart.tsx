@@ -14,6 +14,7 @@ import {
 } from "recharts";
 import { TollPlaza } from "@/lib/types";
 import { TOLL_PLAZAS } from "@/lib/tollAndGridData";
+import { tollCapacityFor } from "@/lib/corridorChainage";
 import { ShieldAlert, Zap, Clock, TrendingUp, Car, Truck, ChevronDown } from "lucide-react";
 
 interface TollFlowChartProps {
@@ -61,6 +62,15 @@ export default function TollFlowChart({
       isPeak: h.hour === currentToll.peakHour,
     }));
   }, [currentToll, segmentFilter]);
+
+  // NH44 plazas read current vs required capacity from the station-level
+  // chainage model; other plazas use the illustrative static figures.
+  const capacity = useMemo(() => {
+    const modelled = tollCapacityFor(currentToll.id);
+    const current = modelled ? modelled.currentMw : currentToll.currentInstalledCapacityMw ?? 0;
+    const required = modelled ? modelled.requiredMw : currentToll.recommendedTollChargerCapacityMw;
+    return { current, required, pct: required ? Math.round((current / required) * 100) : 100, modelled };
+  }, [currentToll]);
 
   const maxVal = Math.max(...chartData.map((d) => d.displayValue), 1);
 
@@ -149,14 +159,18 @@ export default function TollFlowChart({
 
         <div className="rounded-lg border border-line bg-panel p-3 shadow-2xs">
           <div className="flex items-center justify-between text-[11px] font-semibold text-slate-700">
-            <span>Recommended Capacity</span>
+            <span>Charging Capacity: Current vs Required</span>
             <TrendingUp className="h-3.5 w-3.5 text-emerald-600" />
           </div>
-          <div className="mt-1 font-mono text-lg font-bold text-emerald-700">
-            {currentToll.recommendedTollChargerCapacityMw} MW Hub
+          <div className="mt-1 font-mono text-lg font-bold text-slate-950">
+            {capacity.current} <span className="text-xs font-medium text-slate-500">of</span>{" "}
+            <span className="text-emerald-700">{capacity.required} MW</span>
           </div>
           <div className="mt-0.5 text-[10px] font-medium text-slate-600">
-            Supports 15% transit top-up buffer
+            {capacity.pct}% covered · gap {Math.max(0, Math.round((capacity.required - capacity.current) * 100) / 100)} MW
+            {capacity.modelled
+              ? ` · utilization ${capacity.modelled.peakUtilizationPct}% peak, ${capacity.modelled.offPeakUtilizationPct}% off peak`
+              : ""}
           </div>
         </div>
 

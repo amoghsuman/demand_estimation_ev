@@ -40,6 +40,8 @@ import CityShortfallChart from "@/components/charts/CityShortfallChart";
 import CategoryGapChart from "@/components/charts/CategoryGapChart";
 import EvGrowthProjectionChart from "@/components/charts/EvGrowthProjectionChart";
 import TollFlowChart from "@/components/charts/TollFlowChart";
+import CorridorWhiteSpacePanel from "@/components/charts/CorridorWhiteSpacePanel";
+import { NH44_DELHI_CHANDIGARH } from "@/lib/corridorChainage";
 import ChargerUtilizationChart from "@/components/charts/ChargerUtilizationChart";
 import RankedTable, { Column } from "@/components/RankedTable";
 import { TOLL_PLAZAS, SUBSTATIONS } from "@/lib/tollAndGridData";
@@ -279,6 +281,7 @@ export default function Home() {
   const [showCorridors, setShowCorridors] = useState<boolean>(true);
   const [selectedCorridorId, setSelectedCorridorId] = useState<string | null>(null);
   const [selectedTollId, setSelectedTollId] = useState<string>("toll-kherki-daula");
+  const [whiteSpaceHour, setWhiteSpaceHour] = useState<number>(18);
   const [showDataProvenanceModal, setShowDataProvenanceModal] = useState<boolean>(false);
 
   // Side-by-side comparison state
@@ -739,6 +742,8 @@ export default function Home() {
             showTollPlazas={showTollPlazas}
             showSubstations={showSubstations}
             showCorridors={showCorridors}
+            showWhiteSpace={showCorridors}
+            whiteSpaceHour={whiteSpaceHour}
             selectedCorridorId={selectedCorridorId}
             onSelectCorridor={setSelectedCorridorId}
             onSelectToll={(tollId) => {
@@ -1387,7 +1392,7 @@ export default function Home() {
                     </h3>
                   </div>
                 </div>
-                <p className={SUBTEXT_CLASS}>Corridor stops evaluated against 50km MoP guideline · Click bar to inspect stop</p>
+                <p className={SUBTEXT_CLASS}>Corridor stops graded green under 20 km, amber 20 to 30 km, red beyond 30 km · Click bar to inspect stop</p>
                 <CorridorGapChart
                   points={flRows}
                   onSelectPoint={setSelectedPoint}
@@ -1453,6 +1458,32 @@ export default function Home() {
             </p>
             <div className="mt-3">
               <EvGrowthProjectionChart selectedPoint={selectedPoint} />
+            </div>
+          </div>
+
+          {/* Corridor white space & dynamic traffic (chainage model) */}
+          <div id="corridor-white-space-section" className={`${CARD_CLASS} lg:col-span-2 scroll-mt-6`}>
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-rose-100 text-rose-900 border border-rose-200 mb-1.5">
+              WHITE SPACE &amp; DYNAMIC TRAFFIC
+            </span>
+            <h3 className={HEADING_CLASS}>
+              <Car className="h-4 w-4 text-rose-700 shrink-0" />
+              <span>Delhi to Chandigarh: who stops to charge, and do they find a charger?</span>
+            </h3>
+            <p className={SUBTEXT_CLASS}>
+              Toll flow by hour drives stops at each station; occupied guns turn a stretch amber, gaps beyond 30 km turn it red. The map overlay follows the same hour.
+            </p>
+            <div className="mt-3">
+              <CorridorWhiteSpacePanel
+                corridor={NH44_DELHI_CHANDIGARH}
+                hour={whiteSpaceHour}
+                onHourChange={setWhiteSpaceHour}
+                onSelectToll={(tollId) => {
+                  setSelectedTollId(tollId);
+                  const el = document.getElementById("toll-flow-analytics-section");
+                  if (el) el.scrollIntoView({ behavior: "smooth" });
+                }}
+              />
             </div>
           </div>
 

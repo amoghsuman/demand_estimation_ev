@@ -1,5 +1,6 @@
 "use client";
 
+import { GREEN_MAX_KM, RED_MIN_KM } from "@/lib/corridorChainage";
 import { useMemo, useState } from "react";
 import {
   BarChart,
@@ -56,7 +57,7 @@ export default function CorridorGapChart({
   }, [points, selectedCorridor]);
 
   const criticalGapsCount = useMemo(
-    () => points.filter((p) => p.distanceToNearestChargerKm > 50).length,
+    () => points.filter((p) => p.distanceToNearestChargerKm > RED_MIN_KM).length,
     [points]
   );
 
@@ -111,7 +112,7 @@ export default function CorridorGapChart({
         <div className="flex items-center gap-2 text-xs">
           <span className="inline-flex items-center gap-1.5 rounded-md bg-rose-100 px-2.5 py-1 font-bold text-rose-950 border border-rose-300 shadow-2xs">
             <span className="h-2 w-2 rounded-full bg-rose-600 animate-pulse" />
-            {criticalGapsCount} stops &gt;50 km dead-zone
+            {criticalGapsCount} stops beyond {RED_MIN_KM} km (white space)
           </span>
         </div>
       </div>
@@ -176,7 +177,7 @@ export default function CorridorGapChart({
 
             {/* MoP 50km corridor spacing guideline reference */}
             <ReferenceLine
-              x={50}
+              x={RED_MIN_KM}
               stroke="#B43424"
               strokeDasharray="3 3"
               strokeWidth={1.5}
@@ -188,8 +189,8 @@ export default function CorridorGapChart({
                 if (!active || !payload?.length) return null;
                 const row = payload[0]?.payload;
                 if (!row) return null;
-                const isCritical = row.distance > 50;
-                const variance = row.distance - 50;
+                const isCritical = row.distance > RED_MIN_KM;
+                const variance = Math.round((row.distance - RED_MIN_KM) * 10) / 10;
 
                 return (
                   <div className="min-w-[240px] rounded-lg border border-line bg-panel p-3 text-xs shadow-xl font-sans">
@@ -205,7 +206,7 @@ export default function CorridorGapChart({
                             : "bg-emerald-50 text-emerald-800 border-emerald-200"
                         }`}
                       >
-                        {isCritical ? "Critical Dead-Zone" : "Compliant Spacing"}
+                        {isCritical ? "White Space" : "Within Limit"}
                       </span>
                     </div>
 
@@ -217,7 +218,7 @@ export default function CorridorGapChart({
                         </span>
                       </div>
                       <div className="flex justify-between text-[11px]">
-                        <span className="text-muted">MoP 50km Guideline:</span>
+                        <span className="text-muted">{RED_MIN_KM} km white space limit:</span>
                         <span className={isCritical ? "text-rose-700 font-semibold" : "text-signal font-medium"}>
                           {isCritical ? `+${variance} km over safe limit` : `${Math.abs(variance)} km buffer`}
                         </span>
@@ -267,9 +268,9 @@ export default function CorridorGapChart({
               {data.map((d) => {
                 // Color by distance risk:
                 const color =
-                  d.distance > 60
+                  d.distance > RED_MIN_KM
                     ? "#B43424" // Critical dead-zone
-                    : d.distance > 40
+                    : d.distance >= GREEN_MAX_KM
                     ? "#C9A227" // Moderate
                     : "#2C6E52"; // Safe spacing
                 return (
@@ -290,7 +291,7 @@ export default function CorridorGapChart({
           style={{ height: height - 8 }}
         >
           {data.map((row) => {
-            const isCritical = row.distance > 50;
+            const isCritical = row.distance > RED_MIN_KM;
             const isHovered = hoveredId === row.id;
             return (
               <div
@@ -320,19 +321,19 @@ export default function CorridorGapChart({
         <div className="flex items-center gap-3">
           <span className="flex items-center gap-1.5">
             <span className="h-2 w-2 rounded-full bg-rose-600" />
-            Critical &gt;60km
+            White space &gt;{RED_MIN_KM} km
           </span>
           <span className="flex items-center gap-1.5">
             <span className="h-2 w-2 rounded-full bg-copper" />
-            Moderate 40–60km
+            Amber {GREEN_MAX_KM} to {RED_MIN_KM} km
           </span>
           <span className="flex items-center gap-1.5">
             <span className="h-2 w-2 rounded-full bg-signal" />
-            Adequate &lt;40km
+            Green &lt;{GREEN_MAX_KM} km
           </span>
         </div>
         <span className="text-[10px]">
-          Dashed line: <strong className="text-rose-700 font-medium">50 km threshold</strong> (NHAI &amp; MoP highway guideline)
+          Dashed line: <strong className="text-rose-700 font-medium">{RED_MIN_KM} km threshold</strong> (beyond this a stretch counts as white space)
         </span>
       </div>
     </div>

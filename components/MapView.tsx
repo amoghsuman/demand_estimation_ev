@@ -17,6 +17,13 @@ import { Flame, Route, X, ChevronRight, Navigation } from "lucide-react";
 import { DataPoint, TollPlaza, SubstationData } from "@/lib/types";
 import { formatShortfall, getTopDemandHotspots, CORRIDORS, Corridor } from "@/lib/data";
 import { TOLL_PLAZAS, SUBSTATIONS } from "@/lib/tollAndGridData";
+import {
+  CHAINAGE_CORRIDORS,
+  STATUS_COLORS,
+  latLngAtKm,
+  segmentsForHour,
+  simulateCorridor,
+} from "@/lib/corridorChainage";
 
 export type MetricKey = "gapScore" | "demandScore" | "existingChargers";
 
@@ -52,6 +59,10 @@ interface Props {
   showCorridors?: boolean;
   selectedCorridorId?: string | null;
   onSelectCorridor?: (corridorId: string | null) => void;
+  // Charger white space overlay (green / amber / red by kilometre) for
+  // corridors that have a chainage model, driven by the selected hour.
+  showWhiteSpace?: boolean;
+  whiteSpaceHour?: number;
 }
 
 const METRIC_MAX: Record<MetricKey, number> = {
@@ -243,12 +254,15 @@ export default function MapView({
   showCorridors = true,
   selectedCorridorId = null,
   onSelectCorridor,
+  showWhiteSpace = true,
+  whiteSpaceHour = 18,
 }: Props) {
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const clusterGroupRef = useRef<L.MarkerClusterGroup | null>(null);
   const corridorRoutesLayerRef = useRef<L.LayerGroup | null>(null);
   const corridorLayerRef = useRef<L.LayerGroup | null>(null);
+  const whiteSpaceLayerRef = useRef<L.LayerGroup | null>(null);
   const heatLayerRef = useRef<L.HeatLayer | null>(null);
   const hotspotsLayerRef = useRef<L.LayerGroup | null>(null);
   const tollLayerRef = useRef<L.LayerGroup | null>(null);
@@ -495,6 +509,52 @@ export default function MapView({
   }, [showCorridors, selectedCorridorId, emphasizeCorridor, onSelectCorridor]);
 
   // Sync Toll Plazas Layer
+  // Charger white space overlay: 5 km segments coloured by distance to the
+  // nearest usable charger in the selected hour, plus the station pins.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (!whiteSpaceLayerRef.current) whiteSpaceLayerRef.current = L.layerGroup().addTo(map);
+    const layer = whiteSpaceLayerRef.current;
+    layer.clearLayers();
+    if (!showWhiteSpace) return;
+
+    CHAINAGE_CORRIDORS.forEach((c) => {
+      segmentsForHour(c, whiteSpaceHour).forEach((seg) => {
+        L.polyline([seg.from, seg.to], { color: "#ffffff", weight: 11, opacity: 0.95, lineCap: "butt", interactive: false }).addTo(layer);
+        L.polyline([seg.from, seg.to], { color: STATUS_COLORS[seg.status], weight: 7, opacity: 1, lineCap: "butt" })
+          .bindTooltip(
+            `<div style="font-family:'Inter',sans-serif;font-size:11px;"><strong>km ${seg.startKm} to ${seg.endKm}</strong><br/>${seg.reason}</div>`,
+            { sticky: true }
+          )
+          .addTo(layer);
+      });
+
+      simulateCorridor(c).forEach((d) => {
+        const h = d.hours[whiteSpaceHour];
+        const fill = h.available ? STATUS_COLORS.green : STATUS_COLORS.amber;
+        const icon = L.divIcon({
+          className: "",
+          iconSize: [26, 26],
+          iconAnchor: [13, 13],
+          html: `<div style="width:26px;height:26px;border-radius:6px;background:${fill};border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.45);color:#fff;font:700 10px 'Inter',sans-serif;display:flex;align-items:center;justify-content:center;">${h.gunsFree}/${d.station.guns}</div>`,
+        });
+        L.marker(latLngAtKm(c, d.station.km), { icon, zIndexOffset: 800 })
+          .bindPopup(
+            `<div style="font-family:'Inter',sans-serif;min-width:220px;font-size:11px;color:#0f172a;">
+              <div style="font-family:'Newsreader',serif;font-size:15px;font-weight:700;">${d.station.name}</div>
+              <div style="color:#64748b;margin-bottom:6px;">km ${d.station.km} &middot; ${d.station.operator} &middot; ${d.station.guns} guns &times; ${d.station.powerKw} kW (${d.installedMw} MW)</div>
+              <div><strong>${String(whiteSpaceHour).padStart(2, "0")}:00</strong> &middot; ${h.evsPassing} EVs passing &middot; <strong>${h.arrivals}</strong> stop to charge</div>
+              <div>Served ${h.served} &middot; queued ${h.waiting} &middot; <span style="color:${h.turnedAway ? "#B43424" : "#64748b"};font-weight:700;">turned away ${h.turnedAway}</span></div>
+              <div>Utilization <strong>${h.utilizationPct}%</strong> &middot; ${h.gunsFree} guns free</div>
+              <div style="margin-top:4px;padding-top:4px;border-top:1px dashed #cbd5e1;">Day: ${d.foundChargerPct}% of stopping EVs found a charger &middot; needs ${d.requiredGuns} guns (has ${d.station.guns})</div>
+            </div>`
+          )
+          .addTo(layer);
+      });
+    });
+  }, [showWhiteSpace, whiteSpaceHour]);
+
   useEffect(() => {
     const map = mapRef.current;
     const tollLayer = tollLayerRef.current;

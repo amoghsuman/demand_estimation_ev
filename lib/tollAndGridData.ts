@@ -14,7 +14,6 @@ function generateHourlyFlow(
   isExpressway = false
 ): HourlyTollFlow[] {
   const hours: HourlyTollFlow[] = [];
-  const baseHourlyVehicles = totalVehicles / 24;
   const totalEvs = Math.round(totalVehicles * (evSharePct / 100));
 
   // Diurnal traffic weighting profile (standard highway traffic bell curves)
@@ -25,40 +24,44 @@ function generateHourlyFlow(
     0.090, 0.080, 0.065, 0.045, 0.030, 0.018, // 18:00 - 23:00 (evening peak & return)
   ];
 
+  // Pass 1: raw hourly shape (traffic weights, peak amplification, EV share swing)
+  const rawAll: number[] = [];
+  const rawEv: number[] = [];
   for (let h = 0; h < 24; h++) {
-    const timeLabel = `${String(h).padStart(2, "0")}:00`;
     let weight = trafficWeights[h];
-
-    // Amplify around peaks
     if (Math.abs(h - peakHour1) <= 1) weight *= 1.25;
     if (Math.abs(h - peakHour2) <= 1) weight *= 1.25;
 
-    const hourlyAllVehicles = Math.round(totalVehicles * weight);
-    
-    // EV share dips slightly at deep night, surges during daytime commuter & fleet hours
-    let hourlyEvShare = evSharePct;
-    if (h >= 8 && h <= 11) hourlyEvShare *= 1.2;
-    else if (h >= 17 && h <= 21) hourlyEvShare *= 1.3;
-    else if (h >= 1 && h <= 4) hourlyEvShare *= 0.6;
+    // EV share dips at deep night, surges during commuter & fleet hours
+    let shareFactor = 1;
+    if (h >= 8 && h <= 11) shareFactor = 1.2;
+    else if (h >= 17 && h <= 21) shareFactor = 1.3;
+    else if (h >= 1 && h <= 4) shareFactor = 0.6;
 
-    const hourlyEvs = Math.max(8, Math.round(hourlyAllVehicles * (hourlyEvShare / 100)));
+    rawAll.push(weight);
+    rawEv.push(weight * shareFactor);
+  }
 
-    // Breakdown into segments
-    // On expressways: 4W personal + cabs dominate, buses/trucks noticeable
-    // Near urban tolls: commercial fleet cabs & light delivery higher
+  // Pass 2: renormalise so the 24 bars sum exactly to the plaza's stated
+  // daily totals (the earlier version overshot the daily EV count by ~50%).
+  const sumAll = rawAll.reduce((a, b) => a + b, 0);
+  const sumEv = rawEv.reduce((a, b) => a + b, 0);
+
+  for (let h = 0; h < 24; h++) {
+    const timeLabel = `${String(h).padStart(2, "0")}:00`;
+    const hourlyAllVehicles = Math.round((totalVehicles * rawAll[h]) / sumAll);
+    const hourlyEvs = Math.max(1, Math.round((totalEvs * rawEv[h]) / sumEv));
+
     let fourWheeler: number;
     let fleetCommercial: number;
-    let evBusesTrucks: number;
-
     if (isExpressway) {
       fourWheeler = Math.round(hourlyEvs * 0.62);
       fleetCommercial = Math.round(hourlyEvs * 0.26);
-      evBusesTrucks = Math.max(1, hourlyEvs - fourWheeler - fleetCommercial);
     } else {
       fourWheeler = Math.round(hourlyEvs * 0.48);
       fleetCommercial = Math.round(hourlyEvs * 0.42);
-      evBusesTrucks = Math.max(1, hourlyEvs - fourWheeler - fleetCommercial);
     }
+    const evBusesTrucks = Math.max(0, hourlyEvs - fourWheeler - fleetCommercial);
 
     hours.push({
       hour: h,
@@ -75,7 +78,7 @@ function generateHourlyFlow(
   return hours;
 }
 
-export const TOLL_PLAZAS: TollPlaza[] = [
+const RAW_TOLL_PLAZAS: TollPlaza[] = [
   {
     id: "toll-kherki-daula",
     name: "Kherki Daula Toll Plaza",
@@ -224,6 +227,27 @@ export const TOLL_PLAZAS: TollPlaza[] = [
     recommendedTollChargerCapacityMw: 7.5,
   },
   {
+    id: "toll-murthal",
+    name: "Sonipat (Murthal / Bhigan) Toll Plaza",
+    highwayCode: "NH44",
+    corridorName: "Delhi – Chandigarh (NH44)",
+    state: "Haryana",
+    lat: 29.0480,
+    lng: 77.0050,
+    totalDailyVehicles: 78600,
+    totalDailyEvs: 5580,
+    evSharePct: 7.1,
+    peakHour: 18,
+    peakHourEvVolume: 0, // derived from the hourly curve below
+    peakHourTimeLabel: "",
+    offPeakHour: 3,
+    offPeakEvVolume: 0,
+    fastTagLanes: 22,
+    dedicatedEvFastChargeLanes: true,
+    hourlyFlow: generateHourlyFlow(78600, 7.1, 9, 18, true),
+    recommendedTollChargerCapacityMw: 5.6,
+  },
+  {
     id: "toll-panipat-elevated",
     name: "Panipat Elevated Toll Plaza",
     highwayCode: "NH44",
@@ -246,7 +270,7 @@ export const TOLL_PLAZAS: TollPlaza[] = [
   },
   {
     id: "toll-gharaunda",
-    name: "Gharaunda / Bastara Toll Plaza",
+    name: "Karnal (Bastara / Gharaunda) Toll Plaza",
     highwayCode: "NH44",
     corridorName: "Delhi – Chandigarh (NH44)",
     state: "Haryana",
@@ -392,6 +416,37 @@ export const TOLL_PLAZAS: TollPlaza[] = [
     recommendedTollChargerCapacityMw: 2.2,
   },
 ];
+
+// Illustrative share of the recommended MW that is already installed within
+// the plaza's 15 km catchment. NH44 plazas are overridden at render time by
+// the station-level chainage model in lib/corridorChainage.ts.
+const CURRENT_CAPACITY_SHARE: Record<string, number> = {
+  "toll-kherki-daula": 0.58, "toll-khalapur": 0.71, "toll-talegaon": 0.62,
+  "toll-sadahalli": 0.66, "toll-jewar": 0.44, "toll-attibele": 0.49,
+  "toll-vashi": 0.55, "toll-murthal": 0.32, "toll-panipat-elevated": 0.30,
+  "toll-gharaunda": 0.10, "toll-shambhu": 0.27, "toll-dappar": 0.35,
+  "toll-charoti": 0.31, "toll-nelamangala": 0.52, "toll-chengalpattu": 0.40,
+  "toll-manguli": 0.22,
+};
+
+// Peak / off-peak headline fields are derived from the hourly curve so the
+// KPI cards and the bars always agree.
+export const TOLL_PLAZAS: TollPlaza[] = RAW_TOLL_PLAZAS.map((t) => {
+  const peak = t.hourlyFlow.reduce((a, b) => (b.totalEvs > a.totalEvs ? b : a));
+  const off = t.hourlyFlow.reduce((a, b) => (b.totalEvs < a.totalEvs ? b : a));
+  const label = (h: number) =>
+    `${String(h).padStart(2, "0")}:00 - ${String((h + 1) % 24).padStart(2, "0")}:00`;
+  const share = CURRENT_CAPACITY_SHARE[t.id] ?? 0.4;
+  return {
+    ...t,
+    peakHour: peak.hour,
+    peakHourEvVolume: peak.totalEvs,
+    peakHourTimeLabel: label(peak.hour),
+    offPeakHour: off.hour,
+    offPeakEvVolume: off.totalEvs,
+    currentInstalledCapacityMw: Math.round(t.recommendedTollChargerCapacityMw * share * 100) / 100,
+  };
+});
 
 // ==========================================
 // 2. CHARGER UTILIZATION TELEMETRY

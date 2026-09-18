@@ -100,6 +100,8 @@ export interface TollPlaza {
   dedicatedEvFastChargeLanes: boolean;
   hourlyFlow: HourlyTollFlow[];
   recommendedTollChargerCapacityMw: number;
+  // Charging capacity already installed within the plaza's ~15 km catchment.
+  currentInstalledCapacityMw?: number;
 }
 
 export interface ChargerTypeUtilization {
