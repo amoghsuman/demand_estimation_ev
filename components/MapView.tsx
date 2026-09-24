@@ -315,10 +315,10 @@ export default function MapView({
     if (focus) {
       // Corridor view: open on the corridor itself, never on the national map.
       const b = L.latLngBounds(focus.waypoints.map((w) => [w.lat, w.lng] as [number, number]));
-      map.fitBounds(b, { padding: [36, 36], maxZoom: 10 });
+      map.fitBounds(b, { paddingTopLeft: [24, 56], paddingBottomRight: [24, 128], maxZoom: 10 });
       map.whenReady(() => {
         map.invalidateSize();
-        map.fitBounds(b, { padding: [36, 36], maxZoom: 10 });
+        map.fitBounds(b, { paddingTopLeft: [24, 56], paddingBottomRight: [24, 128], maxZoom: 10 });
       });
     }
     L.control.zoom({ position: "bottomright" }).addTo(map);
@@ -367,6 +367,8 @@ export default function MapView({
       map.remove();
       mapRef.current = null;
     };
+    // The focus corridor only matters at creation; later changes are handled by the fit effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Register global window helpers for Leaflet HTML popup actions
@@ -541,7 +543,7 @@ export default function MapView({
       const map = mapRef.current; // read afresh: the instance can change between retries
       if (!map) return;
       map.invalidateSize();
-      map.fitBounds(L.latLngBounds(latlngs), { padding: [36, 36], maxZoom: 10 });
+      map.fitBounds(L.latLngBounds(latlngs), { paddingTopLeft: [24, 56], paddingBottomRight: [24, 128], maxZoom: 10 });
     };
     fit();
     const timers = [250, 800, 1600].map((ms) => setTimeout(fit, ms));
@@ -621,11 +623,13 @@ export default function MapView({
         c.tolls.forEach((t) => {
           const flow = tollFlowAtSlot(t.tollId, whiteSpaceSlot, side);
           const arrow = side === "NB" ? "&#8593;" : "&#8595;";
+          const plaza = TOLL_PLAZAS.find((p) => p.id === t.tollId);
+          const short = (plaza?.name ?? "").replace(/ Toll Plaza.*$/i, "").replace(/\s*\(.*\)/, "").trim().split(" ")[0];
           const icon = L.divIcon({
             className: "",
-            iconSize: [96, 18],
-            iconAnchor: [side === "NB" ? 104 : -8, 9],
-            html: `<div style="white-space:nowrap;background:#0f172a;color:#fff;border-radius:4px;padding:2px 6px;font:700 10px 'Inter',sans-serif;box-shadow:0 1px 4px rgba(0,0,0,.4);">${arrow} ${flow} EV / 15 min</div>`,
+            iconSize: [92, 18],
+            iconAnchor: [side === "NB" ? 100 : -8, 9],
+            html: `<div style="white-space:nowrap;background:#1F2A37;color:#fff;border-radius:3px;padding:2px 7px;font:600 10px 'Inter',sans-serif;box-shadow:0 1px 4px rgba(0,0,0,.35);">${arrow} ${flow} EV <span style="color:#AEB8C4;font-weight:500;">${short}</span></div>`,
           });
           L.marker(offsetPoint(c, t.km, sign), { icon, zIndexOffset: 700, interactive: false }).addTo(layer);
         });
