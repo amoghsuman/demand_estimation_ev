@@ -40,7 +40,7 @@ import CityShortfallChart from "@/components/charts/CityShortfallChart";
 import CategoryGapChart from "@/components/charts/CategoryGapChart";
 import EvGrowthProjectionChart from "@/components/charts/EvGrowthProjectionChart";
 import TollFlowChart from "@/components/charts/TollFlowChart";
-import CorridorWhiteSpacePanel from "@/components/charts/CorridorWhiteSpacePanel";
+import { CorridorTimeBar, CorridorReadout, CorridorStrip, CorridorStationTable, CorridorMapChips, CORRIDOR_CARD, CORRIDOR_CARD_HEAD } from "@/components/charts/CorridorWhiteSpacePanel";
 import { NH44_DELHI_CHANDIGARH } from "@/lib/corridorChainage";
 import ChargerUtilizationChart from "@/components/charts/ChargerUtilizationChart";
 import RankedTable, { Column } from "@/components/RankedTable";
@@ -707,14 +707,14 @@ export default function Home() {
             onClick={() => setView("corridor")}
             className={`rounded-md px-3 py-1.5 transition-colors ${view === "corridor" ? "bg-slate-900 text-white" : "text-slate-700 hover:bg-slate-100"}`}
           >
-            Corridor · NH44
+            Corridor · Delhi to Chandigarh
           </button>
           <button
             type="button"
             onClick={() => setView("urban")}
             className={`rounded-md px-3 py-1.5 transition-colors ${view === "urban" ? "bg-slate-900 text-white" : "text-slate-700 hover:bg-slate-100"}`}
           >
-            Urban &amp; Residential
+            Urban &amp; residential
           </button>
         </div>
         {view === "urban" && <RoleSwitcher role={role} onChange={handleRoleChange} />}
@@ -744,111 +744,89 @@ export default function Home() {
 
       {view === "corridor" && (
         <>
-          <div className="flex h-[720px] xl:h-[780px] shrink-0 w-full overflow-hidden border-b border-line">
-          <div className="relative w-[42%] shrink-0 h-full border-r border-line">
-            <MapView
-              points={[]}
-              metric={metric}
-              emphasizeCorridor
-              onSelect={handleMapSelect}
-              focusPoint={undefined}
-              showHeatmap={false}
-              isCompareMode={false}
-              comparePointA={null}
-              comparePointB={null}
-              activeCompareSlot={0}
-              onSelectComparePoint={handleSelectComparePoint}
-              showHotspots={false}
-              hotspotPoints={[]}
-              showTollPlazas
-              showSubstations={showSubstations}
-              showCorridors
-              showWhiteSpace
-              whiteSpaceSlot={whiteSpaceSlot}
-              corridorFocusId={NH44_DELHI_CHANDIGARH.id}
-              selectedCorridorId={NH44_DELHI_CHANDIGARH.id}
-              onSelectCorridor={() => undefined}
-              onSelectToll={(tollId) => {
-                if (nh44Tolls.some((t) => t.id === tollId)) setSelectedTollId(tollId);
-                const el = document.getElementById("toll-flow-analytics-section");
-                if (el) el.scrollIntoView({ behavior: "smooth" });
-              }}
-            />
-            <div className="absolute bottom-8 left-4 z-[500] max-w-xs rounded-md border border-line bg-panel/95 px-3 py-2 shadow-sm backdrop-blur">
-              <div className="text-[11px] font-bold text-slate-900">Delhi – Chandigarh (NH44), {NH44_DELHI_CHANDIGARH.lengthKm} km · {NH44_DELHI_CHANDIGARH.stations.length} charging stations</div>
-              <div className="mt-0.5 text-[10px] text-slate-700">
-                Two ribbons: left carriageway carries Delhi to Chandigarh traffic, right carriageway Chandigarh to Delhi. Pins show free guns / total guns from the Unified Bharat eCharge (UBC) feed; toll tags show EVs per 15 minute slot by direction. The slider below drives everything.
+          <CorridorTimeBar corridor={NH44_DELHI_CHANDIGARH} slot={whiteSpaceSlot} onSlotChange={setWhiteSpaceSlot} />
+
+          <div className="grid gap-4 px-5 pt-4" style={{ gridTemplateColumns: "40% 1fr", height: 720 }}>
+            <div className={`${CORRIDOR_CARD} flex flex-col`}>
+              <div className={CORRIDOR_CARD_HEAD}>
+                <b className="font-display text-[15px] font-medium text-slate-900">Corridor map</b>
+                <span className="text-[11px] font-medium text-slate-500">
+                  {String(Math.floor(whiteSpaceSlot / 4)).padStart(2, "0")}:{String((whiteSpaceSlot % 4) * 15).padStart(2, "0")} · both carriageways
+                  <label className="ml-3 inline-flex items-center gap-1.5">
+                    <input type="checkbox" checked={showSubstations} onChange={() => setShowSubstations((v) => !v)} className="accent-amber-600" />
+                    substations
+                  </label>
+                </span>
               </div>
-              <label className="mt-1.5 flex items-center gap-1.5 text-[10px] font-semibold text-slate-800">
-                <input type="checkbox" checked={showSubstations} onChange={() => setShowSubstations((v) => !v)} className="accent-amber-600" />
-                Show grid substations
-              </label>
+              <div className="relative flex-1">
+                <MapView
+                  points={[]}
+                  metric={metric}
+                  emphasizeCorridor
+                  onSelect={handleMapSelect}
+                  focusPoint={undefined}
+                  showHeatmap={false}
+                  isCompareMode={false}
+                  comparePointA={null}
+                  comparePointB={null}
+                  activeCompareSlot={0}
+                  onSelectComparePoint={handleSelectComparePoint}
+                  showHotspots={false}
+                  hotspotPoints={[]}
+                  showTollPlazas
+                  showSubstations={showSubstations}
+                  showCorridors
+                  showWhiteSpace
+                  whiteSpaceSlot={whiteSpaceSlot}
+                  corridorFocusId={NH44_DELHI_CHANDIGARH.id}
+                  selectedCorridorId={NH44_DELHI_CHANDIGARH.id}
+                  onSelectCorridor={() => undefined}
+                  onSelectToll={(tollId: string) => {
+                    if (nh44Tolls.some((t) => t.id === tollId)) setSelectedTollId(tollId);
+                    document.getElementById("toll-flow-analytics-section")?.scrollIntoView({ behavior: "smooth" });
+                  }}
+                />
+                <CorridorMapChips slot={whiteSpaceSlot} />
+              </div>
+            </div>
+
+            <div className="flex min-h-0 flex-col gap-4">
+              <CorridorReadout corridor={NH44_DELHI_CHANDIGARH} slot={whiteSpaceSlot} />
+              <CorridorStrip
+                corridor={NH44_DELHI_CHANDIGARH}
+                slot={whiteSpaceSlot}
+                onSelectToll={(tollId) => {
+                  setSelectedTollId(tollId);
+                  document.getElementById("toll-flow-analytics-section")?.scrollIntoView({ behavior: "smooth" });
+                }}
+              />
             </div>
           </div>
-          <aside className="w-[58%] shrink-0 h-full overflow-y-auto bg-panel2 p-5">
-            <div id="toll-flow-analytics-section" className={`${CARD_CLASS} scroll-mt-6`}>
-              <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
-                <div>
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-950 border border-amber-300 mb-1.5">
-                    TOLL FLOW &amp; CHARGING CAPACITY
-                  </span>
-                  <h3 className={HEADING_CLASS}>
-                    <Car className="h-4 w-4 text-amber-700 shrink-0" />
-                    <span>NH44 toll plazas: EV flow by hour, current capacity against requirement</span>
-                  </h3>
-                </div>
-                <div className="flex items-center gap-2">
-                  <label htmlFor="toll-select-dropdown" className="text-xs font-bold text-slate-700">
-                    Toll plaza:
-                  </label>
-                  <select
-                    id="toll-select-dropdown"
-                    value={selectedTollId}
-                    onChange={(e) => setSelectedTollId(e.target.value)}
-                    className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-900 shadow-2xs focus:border-copper focus:outline-none focus:ring-1 focus:ring-copper"
-                  >
-                    {nh44Tolls.map((toll) => (
-                      <option key={toll.id} value={toll.id}>
-                        {toll.name} - {toll.totalDailyEvs.toLocaleString("en-IN")} EVs/day
-                      </option>
-                    ))}
-                  </select>
+
+          <div className="grid gap-4 px-5 pb-8 pt-4 xl:grid-cols-2">
+            <CorridorStationTable corridor={NH44_DELHI_CHANDIGARH} slot={whiteSpaceSlot} />
+            <div id="toll-flow-analytics-section" className={`${CORRIDOR_CARD} scroll-mt-6`}>
+              <div className={CORRIDOR_CARD_HEAD}>
+                <b className="font-display text-[15px] font-medium text-slate-900">
+                  Toll plaza: {nh44Tolls.find((t) => t.id === selectedTollId)?.name.replace(/ Toll Plaza.*$/i, "") ?? ""}
+                </b>
+                <div className="flex gap-0.5 rounded-md bg-panel2 p-0.5 text-[11px] font-semibold">
+                  {nh44Tolls.map((toll) => (
+                    <button
+                      key={toll.id}
+                      onClick={() => setSelectedTollId(toll.id)}
+                      className={`rounded px-2.5 py-1 ${selectedTollId === toll.id ? "bg-[#1F2A37] text-white" : "text-slate-700 hover:bg-white"}`}
+                    >
+                      {toll.name.replace(/ Toll Plaza.*$/i, "").replace(/\s*\(.*\)/, "").split(" ")[0]}
+                    </button>
+                  ))}
                 </div>
               </div>
-              <div className="mt-3">
+              <div className="p-4">
                 <TollFlowChart tollId={selectedTollId} hideSelector />
               </div>
             </div>
-          </aside>
           </div>
-
-          <section className="border-t border-line px-6 py-6 bg-graphite">
-            <div id="corridor-white-space-section" className={`${CARD_CLASS} scroll-mt-6`}>
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-rose-100 text-rose-900 border border-rose-200 mb-1.5">
-                CHARGER PRESENCE, LIVE STATUS &amp; TRAFFIC FLOW
-              </span>
-              <h3 className={HEADING_CLASS}>
-                <Car className="h-4 w-4 text-rose-700 shrink-0" />
-                <span>Delhi to Chandigarh: who stops to charge, and do they find a charger?</span>
-              </h3>
-              <p className={SUBTEXT_CLASS}>
-                Toll flow in 15 minute slots drives stops at each station on its own carriageway; busy or offline guns turn a stretch amber, gaps beyond 30 km turn it red. Live charger status is attributed to Unified Bharat eCharge (UBC).
-              </p>
-              <div className="mt-3">
-                <CorridorWhiteSpacePanel
-                  corridor={NH44_DELHI_CHANDIGARH}
-                  slot={whiteSpaceSlot}
-                  onSlotChange={setWhiteSpaceSlot}
-                  onSelectToll={(tollId) => {
-                    setSelectedTollId(tollId);
-                    const el = document.getElementById("toll-flow-analytics-section");
-                    if (el) el.scrollIntoView({ behavior: "smooth" });
-                  }}
-                />
-              </div>
-            </div>
-
-          </section>
         </>
       )}
 
