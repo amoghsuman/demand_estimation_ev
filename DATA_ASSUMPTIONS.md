@@ -172,3 +172,31 @@ dummy.
 - **Requirement.** Guns needed to serve peak hour arrivals at a 75% target
   utilization. Toll level current vs required MW sums the stations inside a
   15 km catchment of the plaza.
+
+### 8a. Revision, September 2026: carriageways, 15 minute slots, UBC status
+
+- **Two carriageways.** Every station carries a side. `NB` is the left
+  carriageway (Delhi to Chandigarh bound), `SB` the right (Chandigarh to
+  Delhi bound), as driven on Indian roads. Gaps, colours, stops and white
+  spaces are computed per side; a charger across the median counts for
+  nothing.
+- **50 stations, 25 per side.** Clustered near Murthal, Panipat, Karnal,
+  Ambala and Zirakpur, thin between Kurukshetra and Ambala. Each side keeps
+  one white space over 30 km (NB km 168 to 200, SB km 127 to 158) and one
+  20 to 30 km amber stretch. Roadside fuel station sites carry 2 guns of
+  60 kW; hubs carry 6 to 12 guns of 120 kW.
+- **15 minute slots.** The hourly toll curve is resampled to 96 slots by
+  linear interpolation between hour centres, so each hour's four slots sum
+  to the hour. A directional split moves about 7 points through the day:
+  Chandigarh to Delhi heavier in the morning, Delhi to Chandigarh heavier in
+  the evening.
+- **Stop rate.** Unchanged base rates (4W 1.7%, fleet 3.4%, heavy 4.5%),
+  scaled by site attraction and by the gap behind the site in the direction
+  of travel (weight 0.7) plus the average gap on both sides (weight 0.3).
+- **Live status, attributed to Unified Bharat eCharge (UBC).** Each station
+  reports Available, All guns busy, or Offline per slot. Offline windows are
+  deterministic: sites under 95% uptime drop out for 3 slots, under 91% for
+  6 slots. The demo simulates the feed; a production build would read it.
+- **Queue tolerance** stays at 30 minutes of throughput (two slots).
+- The corridor section now stands apart from the urban and residential
+  section, and only the Delhi to Chandigarh corridor carries this model.

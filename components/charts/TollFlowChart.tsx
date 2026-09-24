@@ -19,12 +19,15 @@ import { ShieldAlert, Zap, Clock, TrendingUp, Car, Truck, ChevronDown } from "lu
 
 interface TollFlowChartProps {
   tollId?: string;
+  // Hide the internal plaza selector when the parent already provides one.
+  hideSelector?: boolean;
   initialTollId?: string;
   onSelectToll?: (toll: TollPlaza) => void;
 }
 
 export default function TollFlowChart({
   tollId,
+  hideSelector = false,
   initialTollId,
   onSelectToll,
 }: TollFlowChartProps) {
@@ -78,7 +81,7 @@ export default function TollFlowChart({
     <div className="space-y-4">
       {/* Top Selector & Corridor Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-3">
-        <div className="flex items-center gap-2">
+        <div className={`flex items-center gap-2 ${hideSelector ? "hidden" : ""}`}>
           <span className="text-xs font-bold text-slate-900">Select Toll Plaza:</span>
           <div className="relative inline-block">
             <select
