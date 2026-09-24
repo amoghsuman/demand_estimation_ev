@@ -19,10 +19,16 @@ import { formatShortfall, getTopDemandHotspots, CORRIDORS, Corridor } from "@/li
 import { TOLL_PLAZAS, SUBSTATIONS } from "@/lib/tollAndGridData";
 import {
   CHAINAGE_CORRIDORS,
+  SIDES,
+  SIDE_LABEL,
   STATUS_COLORS,
+  UBC_SOURCE,
+  UBC_STATUS_META,
   latLngAtKm,
-  segmentsForHour,
+  segmentsForSlot,
   simulateCorridor,
+  slotLabel,
+  tollFlowAtSlot,
 } from "@/lib/corridorChainage";
 
 export type MetricKey = "gapScore" | "demandScore" | "existingChargers";
@@ -62,7 +68,9 @@ interface Props {
   // Charger white space overlay (green / amber / red by kilometre) for
   // corridors that have a chainage model, driven by the selected hour.
   showWhiteSpace?: boolean;
-  whiteSpaceHour?: number;
+  whiteSpaceSlot?: number;
+  // When set, only this corridor's ribbon is drawn and the map fits to it.
+  corridorFocusId?: string | null;
 }
 
 const METRIC_MAX: Record<MetricKey, number> = {
@@ -255,7 +263,8 @@ export default function MapView({
   selectedCorridorId = null,
   onSelectCorridor,
   showWhiteSpace = true,
-  whiteSpaceHour = 18,
+  whiteSpaceSlot = 72,
+  corridorFocusId = null,
 }: Props) {
   const mapRef = useRef<L.Map | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -292,14 +301,28 @@ export default function MapView({
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
+    const focus = corridorFocusId ? CORRIDORS.find((c) => c.id === corridorFocusId) : null;
     const map = L.map(containerRef.current, {
       center: INDIA_CENTER,
       zoom: INDIA_ZOOM,
       zoomControl: false,
       attributionControl: true,
+      // Quarter step zoom lets the corridor fill the frame instead of
+      // snapping to the next whole level out.
+      zoomSnap: focus ? 0.25 : 1,
+      zoomDelta: focus ? 0.5 : 1,
     });
+    if (focus) {
+      // Corridor view: open on the corridor itself, never on the national map.
+      const b = L.latLngBounds(focus.waypoints.map((w) => [w.lat, w.lng] as [number, number]));
+      map.fitBounds(b, { padding: [36, 36], maxZoom: 10 });
+      map.whenReady(() => {
+        map.invalidateSize();
+        map.fitBounds(b, { padding: [36, 36], maxZoom: 10 });
+      });
+    }
     L.control.zoom({ position: "bottomright" }).addTo(map);
-    new ResetViewControl().addTo(map);
+    if (!focus) new ResetViewControl().addTo(map);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution:
         '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
@@ -372,7 +395,7 @@ export default function MapView({
     layer.clearLayers();
     if (!showCorridors) return;
 
-    CORRIDORS.forEach((corridor) => {
+    CORRIDORS.filter((c) => !corridorFocusId || c.id === corridorFocusId).forEach((corridor) => {
       const isSelected = selectedCorridorId === corridor.id;
       const latlngs = corridor.waypoints.map((wp) => [wp.lat, wp.lng] as [number, number]);
       if (latlngs.length < 2) return;
@@ -506,54 +529,109 @@ export default function MapView({
       });
       shieldMarker.addTo(layer);
     });
-  }, [showCorridors, selectedCorridorId, emphasizeCorridor, onSelectCorridor]);
+  }, [showCorridors, selectedCorridorId, emphasizeCorridor, onSelectCorridor, corridorFocusId]);
 
-  // Sync Toll Plazas Layer
-  // Charger white space overlay: 5 km segments coloured by distance to the
-  // nearest usable charger in the selected hour, plus the station pins.
+  // Fit the map to the focused corridor once.
+  useEffect(() => {
+    if (!corridorFocusId) return;
+    const corridor = CORRIDORS.find((c) => c.id === corridorFocusId);
+    if (!corridor) return;
+    const latlngs = corridor.waypoints.map((w) => [w.lat, w.lng] as [number, number]);
+    const fit = () => {
+      const map = mapRef.current; // read afresh: the instance can change between retries
+      if (!map) return;
+      map.invalidateSize();
+      map.fitBounds(L.latLngBounds(latlngs), { padding: [36, 36], maxZoom: 10 });
+    };
+    fit();
+    const timers = [250, 800, 1600].map((ms) => setTimeout(fit, ms));
+    return () => timers.forEach(clearTimeout);
+  }, [corridorFocusId]);
+
+  // Charger white space overlay, one ribbon per carriageway: the left
+  // carriageway (Delhi to Chandigarh) sits to the left of the centreline in
+  // the direction of travel, the right carriageway to the right, as driven.
+  // Station pins carry the UBC live status; toll tags carry EVs per slot by
+  // direction.
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    if (!whiteSpaceLayerRef.current) whiteSpaceLayerRef.current = L.layerGroup().addTo(map);
+    // Rebuild the layer group on the current map every time: in dev mode
+    // React mounts the map twice, and a group attached to the discarded
+    // first instance would draw nothing.
+    if (whiteSpaceLayerRef.current) whiteSpaceLayerRef.current.remove();
+    whiteSpaceLayerRef.current = L.layerGroup().addTo(map);
     const layer = whiteSpaceLayerRef.current;
-    layer.clearLayers();
     if (!showWhiteSpace) return;
 
-    CHAINAGE_CORRIDORS.forEach((c) => {
-      segmentsForHour(c, whiteSpaceHour).forEach((seg) => {
-        L.polyline([seg.from, seg.to], { color: "#ffffff", weight: 11, opacity: 0.95, lineCap: "butt", interactive: false }).addTo(layer);
-        L.polyline([seg.from, seg.to], { color: STATUS_COLORS[seg.status], weight: 7, opacity: 1, lineCap: "butt" })
-          .bindTooltip(
-            `<div style="font-family:'Inter',sans-serif;font-size:11px;"><strong>km ${seg.startKm} to ${seg.endKm}</strong><br/>${seg.reason}</div>`,
-            { sticky: true }
-          )
-          .addTo(layer);
-      });
+    const OFFSET_DEG = 0.028; // about 3 km, so the two carriageways separate at corridor zoom
+    const offsetPoint = (c: (typeof CHAINAGE_CORRIDORS)[number], km: number, sign: number): [number, number] => {
+      const [lat, lng] = latLngAtKm(c, km);
+      const [lat2, lng2] = latLngAtKm(c, Math.min(c.lengthKm, km + 1));
+      const [lat1, lng1] = latLngAtKm(c, Math.max(0, km - 1));
+      const cosLat = Math.cos((lat * Math.PI) / 180);
+      const dx = (lng2 - lng1) * cosLat;
+      const dy = lat2 - lat1;
+      const len = Math.hypot(dx, dy) || 1;
+      // left normal of the direction of travel (Delhi to Chandigarh)
+      const nx = -dy / len;
+      const ny = dx / len;
+      return [lat + ny * OFFSET_DEG * sign, lng + (nx * OFFSET_DEG * sign) / cosLat];
+    };
 
-      simulateCorridor(c).forEach((d) => {
-        const h = d.hours[whiteSpaceHour];
-        const fill = h.available ? STATUS_COLORS.green : STATUS_COLORS.amber;
-        const icon = L.divIcon({
-          className: "",
-          iconSize: [26, 26],
-          iconAnchor: [13, 13],
-          html: `<div style="width:26px;height:26px;border-radius:6px;background:${fill};border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.45);color:#fff;font:700 10px 'Inter',sans-serif;display:flex;align-items:center;justify-content:center;">${h.gunsFree}/${d.station.guns}</div>`,
+    CHAINAGE_CORRIDORS.forEach((c) => {
+      SIDES.forEach((side) => {
+        const sign = side === "NB" ? 1 : -1;
+        segmentsForSlot(c, whiteSpaceSlot, side).forEach((seg) => {
+          const from = offsetPoint(c, seg.startKm, sign);
+          const to = offsetPoint(c, seg.endKm, sign);
+          L.polyline([from, to], { color: "#ffffff", weight: 9, opacity: 0.95, lineCap: "butt", interactive: false }).addTo(layer);
+          L.polyline([from, to], { color: STATUS_COLORS[seg.status], weight: 6, opacity: 1, lineCap: "butt" })
+            .bindTooltip(
+              `<div style="font-family:'Inter',sans-serif;font-size:11px;"><strong>${SIDE_LABEL[side].short} · km ${seg.startKm} to ${seg.endKm}</strong><br/>${seg.reason}<br/><strong>${seg.evsPassing}</strong> EVs passing this 15 min slot</div>`,
+              { sticky: true }
+            )
+            .addTo(layer);
         });
-        L.marker(latLngAtKm(c, d.station.km), { icon, zIndexOffset: 800 })
-          .bindPopup(
-            `<div style="font-family:'Inter',sans-serif;min-width:220px;font-size:11px;color:#0f172a;">
-              <div style="font-family:'Newsreader',serif;font-size:15px;font-weight:700;">${d.station.name}</div>
-              <div style="color:#64748b;margin-bottom:6px;">km ${d.station.km} &middot; ${d.station.operator} &middot; ${d.station.guns} guns &times; ${d.station.powerKw} kW (${d.installedMw} MW)</div>
-              <div><strong>${String(whiteSpaceHour).padStart(2, "0")}:00</strong> &middot; ${h.evsPassing} EVs passing &middot; <strong>${h.arrivals}</strong> stop to charge</div>
-              <div>Served ${h.served} &middot; queued ${h.waiting} &middot; <span style="color:${h.turnedAway ? "#B43424" : "#64748b"};font-weight:700;">turned away ${h.turnedAway}</span></div>
-              <div>Utilization <strong>${h.utilizationPct}%</strong> &middot; ${h.gunsFree} guns free</div>
-              <div style="margin-top:4px;padding-top:4px;border-top:1px dashed #cbd5e1;">Day: ${d.foundChargerPct}% of stopping EVs found a charger &middot; needs ${d.requiredGuns} guns (has ${d.station.guns})</div>
-            </div>`
-          )
-          .addTo(layer);
+
+        simulateCorridor(c, side).forEach((d) => {
+          const h = d.slots[whiteSpaceSlot];
+          const meta = UBC_STATUS_META[h.ubcStatus];
+          const icon = L.divIcon({
+            className: "",
+            iconSize: [20, 20],
+            iconAnchor: [10, 10],
+            html: `<div style="width:20px;height:20px;border-radius:5px;background:${meta.color};border:2px solid #fff;box-shadow:0 2px 5px rgba(0,0,0,.4);color:#fff;font:700 8px 'Inter',sans-serif;display:flex;align-items:center;justify-content:center;">${h.gunsFree}/${d.station.guns}</div>`,
+          });
+          L.marker(offsetPoint(c, d.station.km, sign), { icon, zIndexOffset: 800 })
+            .bindPopup(
+              `<div style="font-family:'Inter',sans-serif;min-width:230px;font-size:11px;color:#0f172a;">
+                <div style="font-family:'Newsreader',serif;font-size:15px;font-weight:700;">${d.station.name}</div>
+                <div style="color:#64748b;margin-bottom:6px;">km ${d.station.km} &middot; ${SIDE_LABEL[side].road} (${SIDE_LABEL[side].short}) &middot; ${d.station.guns} guns &times; ${d.station.powerKw} kW</div>
+                <div style="font-weight:700;color:${meta.color};">${UBC_SOURCE.code} status: ${meta.label} &middot; ${h.gunsFree} of ${d.station.guns} guns free</div>
+                <div style="margin-top:4px;"><strong>${slotLabel(whiteSpaceSlot)}</strong> &middot; ${h.evsPassing} EVs passing &middot; <strong>${Math.round(h.arrivals)}</strong> stop to charge</div>
+                <div>Served ${Math.round(h.served)} &middot; queued ${Math.round(h.waiting)} &middot; <span style="color:${h.turnedAway >= 0.5 ? "#B43424" : "#64748b"};font-weight:700;">turned away ${Math.round(h.turnedAway)}</span> &middot; utilization ${h.utilizationPct}%</div>
+                <div style="margin-top:4px;padding-top:4px;border-top:1px dashed #cbd5e1;color:#64748b;">Gap behind on this side: ${d.upstreamGapKm} km &middot; source ${UBC_SOURCE.name} (${UBC_SOURCE.note})</div>
+              </div>`
+            )
+            .addTo(layer);
+        });
+
+        // Directional flow tags at each toll
+        c.tolls.forEach((t) => {
+          const flow = tollFlowAtSlot(t.tollId, whiteSpaceSlot, side);
+          const arrow = side === "NB" ? "&#8593;" : "&#8595;";
+          const icon = L.divIcon({
+            className: "",
+            iconSize: [96, 18],
+            iconAnchor: [side === "NB" ? 104 : -8, 9],
+            html: `<div style="white-space:nowrap;background:#0f172a;color:#fff;border-radius:4px;padding:2px 6px;font:700 10px 'Inter',sans-serif;box-shadow:0 1px 4px rgba(0,0,0,.4);">${arrow} ${flow} EV / 15 min</div>`,
+          });
+          L.marker(offsetPoint(c, t.km, sign), { icon, zIndexOffset: 700, interactive: false }).addTo(layer);
+        });
       });
     });
-  }, [showWhiteSpace, whiteSpaceHour]);
+  }, [showWhiteSpace, whiteSpaceSlot]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -563,7 +641,11 @@ export default function MapView({
     tollLayer.clearLayers();
     if (!showTollPlazas) return;
 
-    TOLL_PLAZAS.forEach((toll) => {
+    // In the corridor view only that corridor's plazas are drawn.
+    const focusTolls = corridorFocusId
+      ? new Set(CHAINAGE_CORRIDORS.find((c) => c.id === corridorFocusId)?.tolls.map((t) => t.tollId) ?? [])
+      : null;
+    TOLL_PLAZAS.filter((t) => !focusTolls || focusTolls.has(t.id)).forEach((toll) => {
       const tollIcon = L.divIcon({
         className: "",
         html: `<div style="width:28px;height:28px;border-radius:6px;background-color:#b45309;color:#ffffff;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,0.35);border:2px solid #ffffff;cursor:pointer;" title="${toll.name}">
@@ -607,7 +689,7 @@ export default function MapView({
       });
       marker.addTo(tollLayer);
     });
-  }, [showTollPlazas, onSelectToll]);
+  }, [showTollPlazas, onSelectToll, corridorFocusId]);
 
   // Sync Substations Layer
   useEffect(() => {
@@ -962,7 +1044,7 @@ export default function MapView({
       )}
 
       {/* Floating Active Corridor Inspector HUD */}
-      {selectedCorridor && (
+      {selectedCorridor && !corridorFocusId && (
         <div
           className={`absolute ${
             isCompareMode ? "top-32" : showHotspots ? "top-36" : "top-16"
