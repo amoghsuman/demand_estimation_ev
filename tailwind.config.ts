@@ -19,8 +19,8 @@ const config: Config = {
         signal: "#2C6E52",
       },
       fontFamily: {
-        display: ["Newsreader", "Georgia", "serif"],
-        sans: ["Inter", "Helvetica", "Arial", "sans-serif"],
+        display: ["var(--font-newsreader)", "Newsreader", "Georgia", "serif"],
+        sans: ["var(--font-inter)", "Inter", "Helvetica", "Arial", "sans-serif"],
       },
     },
   },

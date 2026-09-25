@@ -315,10 +315,10 @@ export default function MapView({
     if (focus) {
       // Corridor view: open on the corridor itself, never on the national map.
       const b = L.latLngBounds(focus.waypoints.map((w) => [w.lat, w.lng] as [number, number]));
-      map.fitBounds(b, { paddingTopLeft: [24, 56], paddingBottomRight: [24, 128], maxZoom: 10 });
+      map.fitBounds(b, { paddingTopLeft: [32, 48], paddingBottomRight: [32, 96], maxZoom: 10.5 });
       map.whenReady(() => {
         map.invalidateSize();
-        map.fitBounds(b, { paddingTopLeft: [24, 56], paddingBottomRight: [24, 128], maxZoom: 10 });
+        map.fitBounds(b, { paddingTopLeft: [32, 48], paddingBottomRight: [32, 96], maxZoom: 10.5 });
       });
     }
     L.control.zoom({ position: "bottomright" }).addTo(map);
@@ -704,7 +704,11 @@ export default function MapView({
     subLayer.clearLayers();
     if (!showSubstations) return;
 
-    SUBSTATIONS.forEach((sub) => {
+    const relevantSubs = corridorFocusId
+      ? SUBSTATIONS.filter((s) => s.id.startsWith("sub-exp-"))
+      : SUBSTATIONS;
+
+    relevantSubs.forEach((sub) => {
       const isCongested = sub.loadUtilizationPct >= 80;
       const subIcon = L.divIcon({
         className: "",
@@ -746,7 +750,7 @@ export default function MapView({
       });
       marker.addTo(subLayer);
     });
-  }, [showSubstations]);
+  }, [showSubstations, corridorFocusId]);
 
   // Sync heatmap overlay representing demand intensity across regions
   useEffect(() => {

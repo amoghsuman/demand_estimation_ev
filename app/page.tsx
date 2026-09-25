@@ -40,8 +40,8 @@ import CityShortfallChart from "@/components/charts/CityShortfallChart";
 import CategoryGapChart from "@/components/charts/CategoryGapChart";
 import EvGrowthProjectionChart from "@/components/charts/EvGrowthProjectionChart";
 import TollFlowChart from "@/components/charts/TollFlowChart";
-import { CorridorTimeBar, CorridorReadout, CorridorStrip, CorridorStationTable, CorridorMapChips, CORRIDOR_CARD, CORRIDOR_CARD_HEAD } from "@/components/charts/CorridorWhiteSpacePanel";
-import { NH44_DELHI_CHANDIGARH } from "@/lib/corridorChainage";
+import { CorridorTimeBar, CorridorReadout, CorridorStrip, CorridorStationTable, CorridorMapChips, CorridorBelowMapAvailability, CORRIDOR_CARD, CORRIDOR_CARD_HEAD } from "@/components/charts/CorridorWhiteSpacePanel";
+import { NH44_DELHI_CHANDIGARH, slotLabel } from "@/lib/corridorChainage";
 import ChargerUtilizationChart from "@/components/charts/ChargerUtilizationChart";
 import RankedTable, { Column } from "@/components/RankedTable";
 import { TOLL_PLAZAS, SUBSTATIONS } from "@/lib/tollAndGridData";
@@ -699,98 +699,161 @@ export default function Home() {
 
   return (
     <main className="min-h-screen w-screen flex flex-col bg-graphite">
-      <header className="flex items-center gap-3 sm:gap-5 px-4 sm:px-6 py-3.5 border-b border-line flex-wrap sm:flex-nowrap">
-        <h1 className="font-display text-xl text-ink shrink-0">Ampere Atlas</h1>
-        <div className="flex items-center rounded-lg border border-line bg-panel p-0.5 text-[11px] font-bold shadow-2xs">
-          <button
-            type="button"
-            onClick={() => setView("corridor")}
-            className={`rounded-md px-3 py-1.5 transition-colors ${view === "corridor" ? "bg-slate-900 text-white" : "text-slate-700 hover:bg-slate-100"}`}
-          >
-            Corridor · Delhi to Chandigarh
-          </button>
-          <button
-            type="button"
-            onClick={() => setView("urban")}
-            className={`rounded-md px-3 py-1.5 transition-colors ${view === "urban" ? "bg-slate-900 text-white" : "text-slate-700 hover:bg-slate-100"}`}
-          >
-            Urban &amp; residential
-          </button>
-        </div>
-        {view === "urban" && <RoleSwitcher role={role} onChange={handleRoleChange} />}
-
-        {/* 50:50 Equal Width View Indicator */}
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-panel border border-line text-xs shadow-2xs">
-          <Columns className="h-3.5 w-3.5 text-copper shrink-0" />
-          <span className="font-semibold text-slate-900 text-[11px]">Equal Split View (50:50)</span>
-          <span className="text-slate-300">·</span>
-          <span className="text-[11px] text-slate-600">Map &amp; Ranked Table</span>
+      <header className="flex items-center justify-between px-5 sm:px-7 py-3 border-b border-line bg-white shadow-2xs flex-wrap md:flex-nowrap gap-3">
+        {/* Left: Brand identity & title */}
+        <div className="flex items-center gap-3 shrink-0">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-900 text-amber-400 shadow-sm">
+            <Zap className="h-5 w-5 fill-current" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="font-display text-lg font-bold tracking-tight text-slate-950">Ampere Atlas</h1>
+              <span className="rounded bg-amber-50 text-amber-900 border border-amber-200 font-mono text-[10px] font-bold px-1.5 py-0.2">
+                India EV
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-500 font-medium">National Charging &amp; Corridor Intelligence</p>
+          </div>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setShowDataProvenanceModal(true)}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200/80 border border-slate-300 text-slate-800 text-[11px] font-semibold transition-colors shadow-2xs"
-          title="Inspect data modeling methodology, synthetic calibration, and telemetry sources"
-        >
-          <Info className="h-3.5 w-3.5 text-copper shrink-0" />
-          <span>Data Calibration &amp; Methodology</span>
-        </button>
+        {/* Center: Primary View Switcher */}
+        <div className="flex items-center gap-2.5">
+          <div className="flex items-center rounded-lg border border-slate-200 bg-slate-100 p-1 text-xs font-semibold shadow-inner">
+            <button
+              type="button"
+              onClick={() => setView("corridor")}
+              className={`flex items-center gap-1.5 rounded-md px-3.5 py-1.5 transition-all cursor-pointer ${
+                view === "corridor"
+                  ? "bg-white text-slate-950 font-bold shadow-xs"
+                  : "text-slate-600 hover:text-slate-950 hover:bg-slate-200/50"
+              }`}
+            >
+              <Route className="h-3.5 w-3.5 text-amber-600" />
+              <span>Corridor · Delhi–Chandigarh</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setView("urban")}
+              className={`flex items-center gap-1.5 rounded-md px-3.5 py-1.5 transition-all cursor-pointer ${
+                view === "urban"
+                  ? "bg-white text-slate-950 font-bold shadow-xs"
+                  : "text-slate-600 hover:text-slate-950 hover:bg-slate-200/50"
+              }`}
+            >
+              <Layers className="h-3.5 w-3.5 text-sky-600" />
+              <span>Urban &amp; Regional Network</span>
+            </button>
+          </div>
 
-        <span className="ml-auto hidden xl:inline text-[11px] text-muted">
-          EV charging demand intelligence for India
-        </span>
+          {view === "urban" && <RoleSwitcher role={role} onChange={handleRoleChange} />}
+        </div>
+
+        {/* Right: Telemetry status & Provenance button */}
+        <div className="flex items-center gap-3 shrink-0">
+          <div className="hidden lg:flex items-center gap-2 text-xs text-slate-600 border-r border-slate-200 pr-3">
+            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="font-medium text-[11px] text-slate-700">Live Telemetry Synchronized</span>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowDataProvenanceModal(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200/80 border border-slate-200 text-slate-800 text-xs font-semibold transition-colors shadow-2xs cursor-pointer"
+            title="Inspect data modeling methodology, synthetic calibration, and telemetry sources"
+          >
+            <Info className="h-3.5 w-3.5 text-amber-700 shrink-0" />
+            <span>Methodology &amp; Data</span>
+          </button>
+        </div>
       </header>
 
       {view === "corridor" && (
         <>
           <CorridorTimeBar corridor={NH44_DELHI_CHANDIGARH} slot={whiteSpaceSlot} onSlotChange={setWhiteSpaceSlot} />
 
-          <div className="grid gap-4 px-5 pt-4" style={{ gridTemplateColumns: "40% 1fr", height: 720 }}>
-            <div className={`${CORRIDOR_CARD} flex flex-col`}>
-              <div className={CORRIDOR_CARD_HEAD}>
-                <b className="font-display text-[15px] font-medium text-slate-900">Corridor map</b>
-                <span className="text-[11px] font-medium text-slate-500">
-                  {String(Math.floor(whiteSpaceSlot / 4)).padStart(2, "0")}:{String((whiteSpaceSlot % 4) * 15).padStart(2, "0")} · both carriageways
-                  <label className="ml-3 inline-flex items-center gap-1.5">
-                    <input type="checkbox" checked={showSubstations} onChange={() => setShowSubstations((v) => !v)} className="accent-amber-600" />
-                    substations
-                  </label>
-                </span>
+          <div className="grid gap-5 px-5 pt-4 xl:grid-cols-12">
+            {/* Left: Corridor Map + Below-Map Charger Availability Deck (5 cols on xl) */}
+            <div className="flex min-h-0 flex-col gap-5 xl:col-span-5">
+              <div className={`${CORRIDOR_CARD} flex flex-col h-[760px] 2xl:h-[820px]`}>
+                <div className={CORRIDOR_CARD_HEAD}>
+                  <div className="flex items-center gap-2">
+                    <Route className="h-4 w-4 text-amber-600" />
+                    <div>
+                      <h3 className="font-display text-[15px] font-bold text-slate-900 leading-tight">
+                        Corridor Map · NH-44
+                      </h3>
+                      <p className="text-[11px] text-slate-500">
+                        {slotLabel(whiteSpaceSlot)} · Delhi to Chandigarh (245 km)
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setShowSubstations((v) => !v)}
+                      className={`px-2.5 py-1 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                        showSubstations
+                          ? "bg-indigo-600 text-white shadow-2xs font-bold"
+                          : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                      }`}
+                      title="Toggle 5 highway grid substations along Delhi-Chandigarh route"
+                    >
+                      <Zap className="h-3 w-3" />
+                      <span>Substations (5)</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="relative flex-1">
+                  <MapView
+                    points={[]}
+                    metric={metric}
+                    emphasizeCorridor
+                    onSelect={handleMapSelect}
+                    focusPoint={undefined}
+                    showHeatmap={false}
+                    isCompareMode={false}
+                    comparePointA={null}
+                    comparePointB={null}
+                    activeCompareSlot={0}
+                    onSelectComparePoint={handleSelectComparePoint}
+                    showHotspots={false}
+                    hotspotPoints={[]}
+                    showTollPlazas
+                    showSubstations={showSubstations}
+                    showCorridors
+                    showWhiteSpace
+                    whiteSpaceSlot={whiteSpaceSlot}
+                    corridorFocusId={NH44_DELHI_CHANDIGARH.id}
+                    selectedCorridorId={NH44_DELHI_CHANDIGARH.id}
+                    onSelectCorridor={() => undefined}
+                    onSelectToll={(tollId: string) => {
+                      if (nh44Tolls.some((t) => t.id === tollId)) setSelectedTollId(tollId);
+                      document.getElementById("toll-flow-analytics-section")?.scrollIntoView({ behavior: "smooth" });
+                    }}
+                  />
+                  <CorridorMapChips slot={whiteSpaceSlot} />
+                </div>
               </div>
-              <div className="relative flex-1">
-                <MapView
-                  points={[]}
-                  metric={metric}
-                  emphasizeCorridor
-                  onSelect={handleMapSelect}
-                  focusPoint={undefined}
-                  showHeatmap={false}
-                  isCompareMode={false}
-                  comparePointA={null}
-                  comparePointB={null}
-                  activeCompareSlot={0}
-                  onSelectComparePoint={handleSelectComparePoint}
-                  showHotspots={false}
-                  hotspotPoints={[]}
-                  showTollPlazas
-                  showSubstations={showSubstations}
-                  showCorridors
-                  showWhiteSpace
-                  whiteSpaceSlot={whiteSpaceSlot}
-                  corridorFocusId={NH44_DELHI_CHANDIGARH.id}
-                  selectedCorridorId={NH44_DELHI_CHANDIGARH.id}
-                  onSelectCorridor={() => undefined}
-                  onSelectToll={(tollId: string) => {
-                    if (nh44Tolls.some((t) => t.id === tollId)) setSelectedTollId(tollId);
-                    document.getElementById("toll-flow-analytics-section")?.scrollIntoView({ behavior: "smooth" });
-                  }}
-                />
-                <CorridorMapChips slot={whiteSpaceSlot} />
-              </div>
+
+              {/* Dedicated Below-Map Charger Availability Deck utilizing previously empty space */}
+              <CorridorBelowMapAvailability
+                corridor={NH44_DELHI_CHANDIGARH}
+                slot={whiteSpaceSlot}
+                onSelectStation={(stationId) => {
+                  const el = document.getElementById(`corridor-station-row-${stationId}`);
+                  if (el) {
+                    el.scrollIntoView({ behavior: "smooth", block: "center" });
+                    el.classList.add("bg-amber-100/70");
+                    setTimeout(() => el.classList.remove("bg-amber-100/70"), 2500);
+                  }
+                }}
+              />
             </div>
 
-            <div className="flex min-h-0 flex-col gap-4">
+            {/* Right: Telemetry & Dual-Carriageway Chainage Strip (7 cols on xl) */}
+            <div className="flex min-h-0 flex-col gap-5 xl:col-span-7">
               <CorridorReadout corridor={NH44_DELHI_CHANDIGARH} slot={whiteSpaceSlot} />
               <CorridorStrip
                 corridor={NH44_DELHI_CHANDIGARH}
@@ -803,19 +866,28 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="grid gap-4 px-5 pb-8 pt-4 xl:grid-cols-2">
+          {/* Lower: Stations Telemetry & 24h Toll Plaza Diurnal Analytics */}
+          <div className="grid gap-5 px-5 pb-10 pt-4 xl:grid-cols-2">
             <CorridorStationTable corridor={NH44_DELHI_CHANDIGARH} slot={whiteSpaceSlot} />
             <div id="toll-flow-analytics-section" className={`${CORRIDOR_CARD} scroll-mt-6`}>
               <div className={CORRIDOR_CARD_HEAD}>
-                <b className="font-display text-[15px] font-medium text-slate-900">
-                  Toll plaza: {nh44Tolls.find((t) => t.id === selectedTollId)?.name.replace(/ Toll Plaza.*$/i, "") ?? ""}
-                </b>
-                <div className="flex gap-0.5 rounded-md bg-panel2 p-0.5 text-[11px] font-semibold">
+                <div>
+                  <h3 className="font-display text-[15px] font-bold text-slate-900 leading-tight">
+                    Toll Plaza Analytics: {nh44Tolls.find((t) => t.id === selectedTollId)?.name.replace(/ Toll Plaza.*$/i, "") ?? ""}
+                  </h3>
+                  <p className="text-[11px] text-slate-500 font-medium">24-hour diurnal vehicle flow &amp; capacity gap</p>
+                </div>
+                <div className="flex gap-1 rounded-lg bg-slate-200/80 p-0.5 text-xs font-semibold">
                   {nh44Tolls.map((toll) => (
                     <button
                       key={toll.id}
+                      type="button"
                       onClick={() => setSelectedTollId(toll.id)}
-                      className={`rounded px-2.5 py-1 ${selectedTollId === toll.id ? "bg-[#1F2A37] text-white" : "text-slate-700 hover:bg-white"}`}
+                      className={`rounded-md px-2.5 py-1 transition-all cursor-pointer ${
+                        selectedTollId === toll.id
+                          ? "bg-slate-900 text-white font-bold shadow-2xs"
+                          : "text-slate-700 hover:bg-white"
+                      }`}
                     >
                       {toll.name.replace(/ Toll Plaza.*$/i, "").replace(/\s*\(.*\)/, "").split(" ")[0]}
                     </button>
@@ -861,16 +933,18 @@ export default function Home() {
               if (el) el.scrollIntoView({ behavior: "smooth" });
             }}
           />
-          <div className="absolute top-4 left-4 bg-panel/90 backdrop-blur border border-line rounded-md px-1.5 py-1 flex items-center gap-1.5 z-[500] shadow-sm">
-            <div className="flex items-center gap-1">
+          <div className="absolute top-4 left-4 bg-white/95 backdrop-blur-md border border-line rounded-xl px-2.5 py-1.5 flex items-center gap-2 z-[500] shadow-md">
+            {/* Metric Segmented Control */}
+            <div className="flex items-center gap-0.5 rounded-lg bg-slate-100 p-0.5">
               {METRIC_OPTIONS.map((opt) => (
                 <button
                   key={opt.key}
+                  type="button"
                   onClick={() => setMetric(opt.key)}
-                  className={`text-[11px] px-2.5 py-1.5 rounded transition-colors ${
+                  className={`text-xs px-2.5 py-1 rounded-md transition-all font-medium cursor-pointer ${
                     metric === opt.key
-                      ? "bg-copper/20 text-copperSoft font-medium"
-                      : "text-muted hover:text-ink"
+                      ? "bg-white text-slate-900 font-bold shadow-2xs"
+                      : "text-slate-600 hover:text-slate-900"
                   }`}
                 >
                   {opt.label}
@@ -878,82 +952,61 @@ export default function Home() {
               ))}
             </div>
 
-            <div className="h-4 w-px bg-line/80 mx-0.5" />
+            <div className="h-4 w-px bg-slate-200" />
 
-            <button
-              id="map-heatmap-toggle-btn"
-              type="button"
-              onClick={() => setShowHeatmap((prev) => !prev)}
-              className={`text-[11px] px-2.5 py-1.5 rounded flex items-center gap-1.5 transition-all ${
-                showHeatmap
-                  ? "bg-copper/25 text-copperSoft border border-copper/40 font-semibold shadow-xs"
-                  : "text-muted hover:text-ink hover:bg-panel border border-transparent"
-              }`}
-              title="Toggle regional demand intensity heatmap overlay"
-            >
-              <Flame className={`h-3.5 w-3.5 ${showHeatmap ? "text-signal" : "text-copper"}`} />
-              <span>Demand Heatmap</span>
-              <span
-                className={`inline-block h-1.5 w-1.5 rounded-full transition-colors ${
-                  showHeatmap ? "bg-signal animate-pulse" : "bg-muted/40"
+            {/* Overlays Group */}
+            <div className="flex items-center gap-1">
+              <button
+                id="map-heatmap-toggle-btn"
+                type="button"
+                onClick={() => setShowHeatmap((prev) => !prev)}
+                className={`text-xs px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
+                  showHeatmap
+                    ? "bg-amber-100 text-amber-950 font-bold border border-amber-300"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-transparent"
                 }`}
-              />
-            </button>
+                title="Toggle regional demand intensity heatmap overlay"
+              >
+                <Flame className={`h-3.5 w-3.5 ${showHeatmap ? "text-amber-700" : "text-slate-400"}`} />
+                <span>Heatmap</span>
+              </button>
 
-            <div className="h-4 w-px bg-line/80 mx-0.5" />
-
-            <button
-              id="map-hotspots-toggle-btn"
-              type="button"
-              onClick={() => setShowHotspots((prev) => !prev)}
-              className={`text-[11px] px-2.5 py-1.5 rounded flex items-center gap-1.5 transition-all ${
-                showHotspots
-                  ? "bg-rose-500/20 text-rose-300 border border-rose-500/40 font-semibold shadow-xs"
-                  : "text-muted hover:text-ink hover:bg-panel border border-transparent"
-              }`}
-              title="Pin top 5 highest-demand locations across India on the map, regardless of active search filter"
-            >
-              <Flame className={`h-3.5 w-3.5 ${showHotspots ? "text-rose-400 animate-pulse" : "text-copper"}`} />
-              <span>Show Hotspots</span>
-              <span
-                className={`inline-flex items-center justify-center px-1.5 py-0.2 rounded-full text-[9px] font-bold ${
+              <button
+                id="map-hotspots-toggle-btn"
+                type="button"
+                onClick={() => setShowHotspots((prev) => !prev)}
+                className={`text-xs px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
                   showHotspots
-                    ? "bg-rose-500 text-white"
-                    : "bg-panel border border-line text-muted"
+                    ? "bg-rose-100 text-rose-950 font-bold border border-rose-300"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-transparent"
                 }`}
+                title="Pin top 5 highest-demand locations across India on the map"
               >
-                5
-              </span>
-            </button>
+                <Flame className={`h-3.5 w-3.5 ${showHotspots ? "text-rose-600" : "text-slate-400"}`} />
+                <span>Hotspots</span>
+                <span className="font-mono text-[10px] text-slate-500 font-bold">5</span>
+              </button>
 
-            <div className="h-4 w-px bg-line/80 mx-0.5" />
-
-            <button
-              id="map-substations-toggle-btn"
-              type="button"
-              onClick={() => setShowSubstations((prev) => !prev)}
-              className={`text-[11px] px-2.5 py-1.5 rounded flex items-center gap-1.5 transition-all ${
-                showSubstations
-                  ? "bg-indigo-100 text-indigo-950 border border-indigo-400 font-bold shadow-xs"
-                  : "text-muted hover:text-ink hover:bg-panel border border-transparent"
-              }`}
-              title="Toggle electrical distribution substations showing EV headroom & feeder capacity"
-            >
-              <Zap className={`h-3.5 w-3.5 ${showSubstations ? "text-indigo-800" : "text-slate-500"}`} />
-              <span>Substations</span>
-              <span
-                className={`inline-flex items-center justify-center px-1.5 py-0.2 rounded-full text-[9px] font-bold ${
+              <button
+                id="map-substations-toggle-btn"
+                type="button"
+                onClick={() => setShowSubstations((prev) => !prev)}
+                className={`text-xs px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
                   showSubstations
-                    ? "bg-indigo-800 text-white"
-                    : "bg-panel border border-line text-muted"
+                    ? "bg-indigo-100 text-indigo-950 font-bold border border-indigo-300"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-transparent"
                 }`}
+                title="Toggle electrical distribution substations showing EV headroom & feeder capacity"
               >
-                {SUBSTATIONS.length}
-              </span>
-            </button>
+                <Zap className={`h-3.5 w-3.5 ${showSubstations ? "text-indigo-700" : "text-slate-400"}`} />
+                <span>Substations</span>
+                <span className="font-mono text-[10px] text-slate-500 font-bold">{SUBSTATIONS.length}</span>
+              </button>
+            </div>
 
-            <div className="h-4 w-px bg-line/80 mx-0.5" />
+            <div className="h-4 w-px bg-slate-200" />
 
+            {/* Compare Tool */}
             <button
               id="map-compare-mode-btn"
               type="button"
@@ -970,41 +1023,35 @@ export default function Home() {
                   return next;
                 });
               }}
-              className={`text-[11px] px-2.5 py-1.5 rounded flex items-center gap-1.5 transition-all ${
+              className={`text-xs px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
                 isCompareMode
-                  ? "bg-amber-500/20 text-amber-300 border border-amber-500/40 font-semibold shadow-xs"
-                  : "text-muted hover:text-ink hover:bg-panel border border-transparent"
+                  ? "bg-slate-900 text-white font-bold shadow-xs"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-transparent"
               }`}
               title="Compare two locations side-by-side"
             >
-              <ArrowLeftRight className={`h-3.5 w-3.5 ${isCompareMode ? "text-amber-400" : "text-muted"}`} />
+              <ArrowLeftRight className="h-3.5 w-3.5" />
               <span>Compare</span>
-              <span
-                className={`text-[10px] px-1 py-0.2 rounded border ${
-                  isCompareMode
-                    ? "bg-amber-500/20 border-amber-500/40 text-amber-200"
-                    : "bg-panel border-line text-muted"
-                }`}
-              >
+              <span className="font-mono text-[10px] text-slate-400">
                 {[comparePointA, comparePointB].filter(Boolean).length}/2
               </span>
             </button>
           </div>
 
           {isCompareMode && (
-            <div className="absolute top-16 left-4 z-[500] bg-panel/95 backdrop-blur border border-amber-500/30 shadow-md rounded-md px-3 py-2 text-xs flex items-center gap-2.5">
-              <span className="text-amber-300 text-[11px] font-semibold flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-amber-400 inline-block" />
+            <div className="absolute top-16 left-4 z-[500] bg-white/95 backdrop-blur-md border border-amber-300 shadow-md rounded-xl px-3.5 py-2 text-xs flex items-center gap-3">
+              <span className="text-amber-800 text-xs font-bold flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
                 Compare Mode Active
               </span>
-              <span className="text-line text-xs">|</span>
-              <span className="text-muted text-[11px]">
-                Click map markers to pick{" "}
-                <strong className={activeCompareSlot === 0 ? "text-amber-300 underline" : "text-amber-400"}>
+              <span className="text-slate-300">|</span>
+              <span className="text-slate-600 text-[11px]">
+                Click markers to choose{" "}
+                <strong className={activeCompareSlot === 0 ? "text-amber-700 underline" : "text-slate-800"}>
                   Location A
                 </strong>{" "}
                 or{" "}
-                <strong className={activeCompareSlot === 1 ? "text-sky-300 underline" : "text-sky-400"}>
+                <strong className={activeCompareSlot === 1 ? "text-sky-700 underline" : "text-slate-800"}>
                   Location B
                 </strong>
               </span>
@@ -1021,11 +1068,11 @@ export default function Home() {
 
         {/* Right Table & Detail Panel - strictly 50% width to match left map panel */}
         <aside className="w-1/2 shrink-0 border-l border-line bg-panel2 flex flex-col overflow-y-auto h-full">
-          <div className="px-5 pt-3.5 pb-3.5 border-b border-line bg-panel2/60">
+          <div className="px-5 pt-3.5 pb-3.5 border-b border-line bg-white">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-copper shadow-2xs" />
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-900">
+                <span className="h-2 w-2 rounded-full bg-amber-600 shadow-2xs" />
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-800">
                   {role === "operator"
                     ? "Network Performance Telemetry"
                     : role === "government"
@@ -1033,14 +1080,14 @@ export default function Home() {
                     : "Highway Corridor Vital Signs"}
                 </span>
               </div>
-              <span className="text-[10px] font-semibold text-slate-800 bg-white px-2 py-0.5 rounded-full border border-line shadow-2xs">
-                Live Feed
+              <span className="text-[10px] font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
+                Live Data Synchronized
               </span>
             </div>
             <KpiPanel kpis={kpis} />
           </div>
 
-          <div className="flex flex-col min-h-0 flex-1 px-5 pt-3.5 pb-4">
+          <div className="flex flex-col min-h-0 flex-1 px-5 pt-4 pb-4">
             {isCompareMode ? (
               <LocationComparePanel
                 allPoints={ALL_POINTS}
@@ -1065,13 +1112,13 @@ export default function Home() {
               />
             ) : (
               <>
-                {/* Visual Header Box with High-Contrast Typography & Visual Accent */}
-                <div className="mb-3 bg-white rounded-xl border border-line p-3.5 shadow-2xs">
+                {/* Clean Editorial Section Header without candy box nesting */}
+                <div className="mb-3.5">
                   <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-950 border border-amber-300 shadow-2xs">
-                        {role === "operator" ? "OPPORTUNITY MATRIX" : role === "government" ? "STATE TARGET AUDIT" : "CORRIDOR READINESS"}
-                      </span>
+                    <div>
+                      <div className="text-[10.5px] font-bold uppercase tracking-wider text-slate-500 mb-0.5">
+                        {role === "operator" ? "Deployment Opportunity Matrix" : role === "government" ? "State Targets & Rollout Progress" : "National Highway Corridor Readiness"}
+                      </div>
                       <h2 className="font-display text-lg font-bold text-slate-950 tracking-tight">
                         {ROLE_HEADLINES[role].title}
                       </h2>
@@ -1086,7 +1133,7 @@ export default function Home() {
                       </span>
                     )}
                   </div>
-                  <p className="text-xs font-normal text-slate-700 mt-1 leading-relaxed">
+                  <p className="text-xs font-normal text-slate-600 mt-0.5 leading-relaxed">
                     {ROLE_HEADLINES[role].sub}
                   </p>
                 </div>
@@ -1094,7 +1141,7 @@ export default function Home() {
                 {/* Real-time search filter input bar */}
                 <div className="relative mb-2.5">
                   <Search
-                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500"
+                    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400"
                     aria-hidden="true"
                   />
                   <input
@@ -1107,14 +1154,14 @@ export default function Home() {
                         ? "Filter states by name (e.g. Maharashtra, Delhi)..."
                         : "Filter by city or location (e.g. Gurugram, Indiranagar)..."
                     }
-                    className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-8 text-xs text-slate-950 placeholder:text-slate-500 focus:border-copper focus:outline-none focus:ring-1 focus:ring-copper/40 transition-colors shadow-2xs font-medium"
+                    className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-8 text-xs text-slate-950 placeholder:text-slate-400 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500/30 transition-colors shadow-2xs font-medium"
                   />
                   {searchQuery && (
                     <button
                       type="button"
                       id="clear-location-search"
                       onClick={() => setSearchQuery("")}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded p-1 text-slate-500 hover:text-slate-950 transition-colors"
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded p-1 text-slate-400 hover:text-slate-950 transition-colors"
                       title="Clear search filter"
                       aria-label="Clear search filter"
                     >
@@ -1367,11 +1414,11 @@ export default function Home() {
           <div className={CARD_CLASS}>
             <div className="flex items-start justify-between gap-3 mb-2">
               <div>
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-800 border border-slate-200 mb-1.5">
-                  FLEET COMPOSITION
-                </span>
+                <div className="text-[10.5px] font-bold uppercase tracking-wider text-slate-500 mb-0.5">
+                  Fleet Composition
+                </div>
                 <h3 className={HEADING_CLASS}>
-                  <PieChart className="h-4 w-4 text-copper shrink-0" />
+                  <PieChart className="h-4 w-4 text-amber-600 shrink-0" />
                   <span>{role === "fleet" ? "Corridor" : "National"} vehicle segment mix</span>
                 </h3>
               </div>
@@ -1386,9 +1433,9 @@ export default function Home() {
               <>
                 <div className="flex items-start justify-between gap-3 mb-2">
                   <div>
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-rose-100 text-rose-900 border border-rose-200 mb-1.5">
-                      DEFICIT ANALYSIS
-                    </span>
+                    <div className="text-[10.5px] font-bold uppercase tracking-wider text-slate-500 mb-0.5">
+                      Deficit Analysis
+                    </div>
                     <h3 className={HEADING_CLASS}>
                       <BarChart3 className="h-4 w-4 text-rose-600 shrink-0" />
                       <span>EV registrations vs. existing chargers</span>
@@ -1403,9 +1450,9 @@ export default function Home() {
               <>
                 <div className="flex items-start justify-between gap-3 mb-2">
                   <div>
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-indigo-100 text-indigo-900 border border-indigo-200 mb-1.5">
-                      POLICY BENCHMARK
-                    </span>
+                    <div className="text-[10.5px] font-bold uppercase tracking-wider text-slate-500 mb-0.5">
+                      Policy Benchmark
+                    </div>
                     <h3 className={HEADING_CLASS}>
                       <ShieldCheck className="h-4 w-4 text-indigo-600 shrink-0" />
                       <span>EV registrations vs. chargers by state</span>
@@ -1420,9 +1467,9 @@ export default function Home() {
               <>
                 <div className="flex items-start justify-between gap-3 mb-2">
                   <div>
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-900 border border-amber-200 mb-1.5">
-                      HIGHWAY CONNECTIVITY
-                    </span>
+                    <div className="text-[10.5px] font-bold uppercase tracking-wider text-slate-500 mb-0.5">
+                      Highway Connectivity
+                    </div>
                     <h3 className={HEADING_CLASS}>
                       <Car className="h-4 w-4 text-amber-600 shrink-0" />
                       <span>Distance to nearest highway fast-charger</span>
@@ -1443,9 +1490,9 @@ export default function Home() {
             <div className={CARD_CLASS}>
               <div className="flex items-start justify-between gap-3 mb-2">
                 <div>
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-purple-100 text-purple-900 border border-purple-200 mb-1.5">
-                    METROPOLITAN SHORTFALL
-                  </span>
+                  <div className="text-[10.5px] font-bold uppercase tracking-wider text-slate-500 mb-0.5">
+                    Metropolitan Shortfall
+                  </div>
                   <h3 className={HEADING_CLASS}>
                     <Building2 className="h-4 w-4 text-purple-600 shrink-0" />
                     <span>Total charger shortfall by city</span>
@@ -1462,9 +1509,9 @@ export default function Home() {
           <div className={`${CARD_CLASS} ${lastChartSpansFull ? "lg:col-span-2" : ""}`}>
             <div className="flex items-start justify-between gap-3 mb-2">
               <div>
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-900 border border-emerald-200 mb-1.5">
-                  LAND-USE TYPOLOGY
-                </span>
+                <div className="text-[10.5px] font-bold uppercase tracking-wider text-slate-500 mb-0.5">
+                  Land-Use Typology
+                </div>
                 <h3 className={HEADING_CLASS}>
                   <Layers className="h-4 w-4 text-emerald-600 shrink-0" />
                   <span>Average gap score by area category</span>
@@ -1481,9 +1528,9 @@ export default function Home() {
           <div className={`${CARD_CLASS} lg:col-span-2`}>
             <div className="flex flex-wrap items-baseline justify-between gap-2 mb-1">
               <div>
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-cyan-100 text-cyan-950 border border-cyan-300 mb-1.5">
-                  STRATEGIC FORECAST (2026–2031)
-                </span>
+                <div className="text-[10.5px] font-bold uppercase tracking-wider text-slate-500 mb-0.5">
+                  Strategic Forecast (2026–2031)
+                </div>
                 <h3 className={HEADING_CLASS}>
                   <TrendingUp className="h-4 w-4 text-cyan-700 shrink-0" />
                   <span>5-Year Projected EV Registration Growth &amp; Target Capacity</span>
@@ -1502,9 +1549,9 @@ export default function Home() {
           <div className={`${CARD_CLASS} lg:col-span-2`}>
             <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
               <div>
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-950 border border-emerald-300 mb-1.5">
-                  DISPATCH &amp; ASSET UTILIZATION
-                </span>
+                <div className="text-[10.5px] font-bold uppercase tracking-wider text-slate-500 mb-0.5">
+                  Dispatch &amp; Asset Utilization
+                </div>
                 <h3 className={HEADING_CLASS}>
                   <Gauge className="h-4 w-4 text-emerald-700 shrink-0" />
                   <span>Charger Utilization Rates, Dwell Times &amp; Queue Delay Benchmarks</span>
